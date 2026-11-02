@@ -71,7 +71,13 @@ button{cursor:pointer}
 .lg-main .sym{font:700 14px var(--f-mono)}
 .lg-main .ohlc{font:12px var(--f-mono);margin-left:8px}
 .lg-main .ohlc span{color:var(--muted);margin-left:4px}
-.lg-main .live{font-size:11px;margin-left:8px}
+.lg-main .live{font-size:11px;margin-left:8px;display:inline-flex;align-items:center;gap:4px}
+.pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);transition:transform .15s,box-shadow .15s}
+.pulse.rt{background:var(--up)}
+.pulse.on{transform:scale(1.5);box-shadow:0 0 0 3px color-mix(in srgb,var(--up) 30%,transparent)}
+.lg-alt{pointer-events:auto;margin-left:8px;border:1px solid color-mix(in srgb,var(--accent) 60%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--fg);font:600 11px var(--f-body);border-radius:4px;padding:1px 7px;cursor:pointer}
+.lg-alt:hover{background:color-mix(in srgb,var(--accent) 25%,transparent)}
+.zap{font-style:normal;font-size:10px;color:var(--accent)}
 .lg-rows{display:flex;flex-direction:column;gap:1px;margin-top:2px}
 .lg-tog{pointer-events:auto;align-self:flex-start;border:1px solid var(--line);background:color-mix(in srgb,var(--chart-bg) 80%,transparent);color:var(--muted);font:11px var(--f-mono);border-radius:4px;padding:0 6px;margin-top:2px;line-height:18px}
 .lg-tog:hover{color:var(--fg)}
@@ -1142,6 +1148,35 @@ const DS = (() => {
     NAS100: '^NDX', US100: '^NDX', US500: '^GSPC', JP225: '^N225', COPPER: 'HG=F', NATGAS: 'NG=F' });
   const names = {};   // key → 이름 (검색·메타에서 채움)
 
+  // 야후 종목(지연·긴 과거) ↔ 바이낸스 TradFi 무기한(실시간·2025-12 이후 과거만) 대응
+  const FUT_ALT = { SI: 'XAG', GC: 'XAU', PL: 'XPT', PA: 'XPD', HG: 'COPPER', CL: 'CL', BZ: 'BZ', NG: 'NATGAS' };
+  const KR_ALT = { '005930': 'SAMSUNG', '000660': 'SKHYNIX', '005380': 'HYUNDAI', '042700': 'HANMI', '066570': 'LGELECTRONICS',
+    '035420': 'NAVER', '069500': 'KODEX200', '009150': 'SAMSUNGEM' };
+  const IDX_ALT = { '^GSPC': 'SPY', '^NDX': 'QQQ', '^IXIC': 'QQQ', '^RUT': 'IWM', '^KS200': 'KODEX200', '^KS11': 'KODEX200', '^SOX': 'SMH' };
+  Object.assign(KR_NAMES, { '042700': '한미반도체', '069500': 'KODEX 200', '009150': '삼성전기' });
+  Object.assign(KR_BY_NAME, { '한미반도체': '042700', 'KODEX200': '069500', 'KODEX 200': '069500', '삼성전기': '009150' });
+  function liveAlt(key) {
+    if (!key || !key.startsWith('YAHOO:')) return null;
+    const id = key.slice(6); let base = null, kind = 'same';
+    const f = id.match(/^([A-Z0-9]{1,4})=F$/);
+    if (f) { base = FUT_ALT[f[1]]; kind = 'spot'; }
+    else if (/^\d{6}\.K[SQ]$/.test(id)) { base = KR_ALT[id.slice(0, 6)]; kind = 'usd'; }
+    else if (IDX_ALT[id]) { base = IDX_ALT[id]; kind = 'etf'; }
+    else if (/^[A-Z]{1,5}(-[A-Z])?$/.test(id)) base = id.replace('-', '');
+    const s = base && bx.syms.get(base + 'USDT');
+    return s && s.tradfi ? { key: 'BINANCE:' + s.id, kind } : null;
+  }
+  // 반대로: 바이낸스 TradFi → 긴 과거가 있는 야후 종목
+  function historyAlt(key) {
+    if (!key || !key.startsWith('BINANCE:')) return null;
+    const s = bx.syms.get(key.slice(8)); if (!s || !s.tradfi) return null;
+    const b = s.base;
+    const fut = Object.entries(FUT_ALT).find(([, v]) => v === b); if (fut) return 'YAHOO:' + fut[0] + '=F';
+    const kr = Object.entries(KR_ALT).find(([, v]) => v === b); if (kr) return 'YAHOO:' + kr[0] + '.KS';
+    if (s.utype === 'EQUITY') return 'YAHOO:' + (b === 'BRKB' ? 'BRK-B' : b);
+    return null;
+  }
+
   // ---------------- 바이낸스 종목 목록 ----------------
   const bx = { syms: new Map(), loaded: null };
   function loadBinance() {
@@ -1204,7 +1239,12 @@ const DS = (() => {
   function nameOf(key) {
     if (names[key]) return names[key];
     const { src, id } = parseKey(key);
-    if (src === 'binance') { const s = bx.syms.get(id); return s?.tradfi ? `${s.base} (바이낸스 TradFi)` : s ? `${s.base} 무기한` : ''; }
+    if (src === 'binance') {
+      const s = bx.syms.get(id); if (!s) return '';
+      if (!s.tradfi) return `${s.base} 무기한`;
+      const h = historyAlt(key), hn = h ? nameOf(h) : '';
+      return `${hn && hn !== '주식' ? hn + ' · ' : ''}${s.base} 실시간 (바이낸스 TradFi)`;
+    }
     const fut = id.match(/^([A-Z0-9]{1,4})=F$/); if (fut) return FUT[fut[1]] || '선물 연결물';
     if (/^\d{6}\.K[SQ]$/.test(id)) return KR_NAMES[id.slice(0, 6)] || (id.endsWith('KS') ? '코스피' : '코스닥');
     return IDX_NAME[id] || '';
@@ -1389,7 +1429,7 @@ const DS = (() => {
     `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}&price_change_percentage=24h,7d,30d`);
   const cgTrending = () => cg('/api/cg/trending', 'https://api.coingecko.com/api/v3/search/trending');
 
-  return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, loadBinance, bx, parseKey, label, nameOf, sourceLabel, names, meta,
+  return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, loadBinance, bx, parseKey, label, nameOf, sourceLabel, names, meta,
     resolveSync, resolve, search, localSearch, klines, cachedKlines, recent, streamKline, streamTickers, binanceTickers, yahooQuotes,
     cgMarkets, cgTrending, KR_NAMES };
 })();
@@ -2020,7 +2060,7 @@ const CH = (() => {
     const fold = isFolded();
     legend.innerHTML = `<div class="lg-pane${fold ? ' folded' : ''}" data-pane="0" style="top:0">
       <div class="lg-main"><b class="sym">${esc(DS.label(S.key))}</b><span class="dim"> · ${DS.TF_NAME[S.tf]} · ${esc(m.exchangeName || DS.sourceLabel(S.key))}</span>${name ? `<span class="dim nm2"> · ${esc(name)}</span>` : ''}
-        <span class="ohlc"></span><span class="live dim">${esc(S.status)}</span></div>
+        <span class="ohlc"></span><span class="live dim"><i class="pulse${S.stream && S.stream.kind === '실시간' ? ' rt' : ''}"></i>${esc(S.status)}</span>${altChip()}</div>
       <button class="lg-tog" data-a="fold" title="${fold ? '지표 범례 펼치기' : '지표 범례 접기'}">${fold ? '▸' : '▾'} ${main.length}</button>
       <div class="lg-rows">${main.map(row).join('')}</div></div>` +
       Object.entries(byPane).map(([p, hs]) => `<div class="lg-pane" data-pane="${p}">${hs.map(row).join('')}</div>`).join('');
@@ -2028,6 +2068,19 @@ const CH = (() => {
     updateLegendValues(null);
   }
   function isFolded() { try { const v = localStorage.getItem('mc.fold'); return v == null ? innerWidth < 700 : v === '1'; } catch { return false; } }
+  // 야후 종목이면 「⚡ 실시간」, 바이낸스 TradFi면 「긴 과거」(PC 서버 연결 시) 전환 버튼
+  function altChip() {
+    const a = DS.liveAlt(S.key);
+    if (a) return `<button class="lg-alt" data-alt="${esc(a.key)}" title="바이낸스 TradFi 무기한 (2025년 12월 이후 과거만)">⚡ 실시간 ${esc(DS.label(a.key))}</button>`;
+    const h = DS.historyAlt(S.key);
+    if (h && DS.srv.ok) return `<button class="lg-alt" data-alt="${esc(h)}" title="야후 데이터 (지연, 상장 이후 전체 과거)">긴 과거 ${esc(DS.label(h))}</button>`;
+    return '';
+  }
+  let pulseT = null;
+  function pulse() {
+    const el = legend && legend.querySelector('.pulse'); if (!el) return;
+    el.classList.add('on'); clearTimeout(pulseT); pulseT = setTimeout(() => el.classList.remove('on'), 250);
+  }
   function placeLegends() {
     if (!chart || !legend) return;
     const top0 = box.getBoundingClientRect().top;
@@ -2097,6 +2150,7 @@ const CH = (() => {
     clearTimeout(refillTimer);
     refillTimer = setTimeout(refill, appended ? 0 : 1500);
     if (!document.querySelector('.lg-row:hover')) updateLegendValues(null);
+    pulse();
     onChange('tick');
   }
   async function loadOlder() {
@@ -2126,6 +2180,7 @@ const CH = (() => {
     bindPointer();
     new ResizeObserver(() => requestAnimationFrame(placeLegends)).observe(box);
     legend.addEventListener('click', e => {
+      const alt = e.target.closest('button[data-alt]'); if (alt) { UI.openChart(alt.dataset.alt); return; }
       const b = e.target.closest('button[data-a]'); if (!b) return;
       if (b.dataset.a === 'fold') { try { localStorage.setItem('mc.fold', isFolded() ? '0' : '1'); } catch {} buildLegend(); return; }
       const id = b.closest('.lg-row').dataset.id, inst = layout.find(x => x.id === id); if (!inst) return;
@@ -2172,8 +2227,9 @@ const UI = (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const STORE = 'mc.v1';
-  const DEF_LIST = ['BINANCE:BTCUSDT', 'BINANCE:ETHUSDT', 'BINANCE:SOLUSDT', 'BINANCE:XRPUSDT', '###선물·지수', 'YAHOO:SI=F', 'YAHOO:GC=F',
-    'YAHOO:NQ=F', 'YAHOO:^GSPC', 'YAHOO:DX-Y.NYB', '###미국', 'YAHOO:NVDA', 'YAHOO:AAPL', 'YAHOO:TSLA', '###한국', 'YAHOO:005930.KS', 'YAHOO:000660.KS'];
+  const DEF_LIST = ['BINANCE:BTCUSDT', 'BINANCE:ETHUSDT', 'BINANCE:SOLUSDT', 'BINANCE:XRPUSDT', '###원자재·지수', 'BINANCE:XAGUSDT', 'BINANCE:XAUUSDT',
+    'BINANCE:CLUSDT', 'BINANCE:QQQUSDT', 'BINANCE:SPYUSDT', '###미국', 'BINANCE:NVDAUSDT', 'BINANCE:AAPLUSDT', 'BINANCE:TSLAUSDT', '###한국',
+    'BINANCE:SAMSUNGUSDT', 'BINANCE:SKHYNIXUSDT', '###긴 과거 (PC 서버)', 'YAHOO:SI=F', 'YAHOO:005930.KS'];
   const ST = Object.assign({ lists: [{ name: '내 관심목록', items: DEF_LIST }], active: 0, layout: null, tf: '1d', key: 'BINANCE:BTCUSDT',
     log: true, magnet: true, fibTemplate: null, sideTab: 'wl', view: 'chart', theme: 'system' }, read(STORE) || {});
   function read(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -2259,7 +2315,11 @@ const UI = (() => {
       const q = inp.value.trim(), my = ++seq;
       items = []; act = 0;
       const direct = q ? DS.resolveSync(q) : null;
-      if (direct) items.push({ key: direct, label: DS.label(direct), name: DS.nameOf(direct) || '바로 열기', exch: DS.sourceLabel(direct) });
+      if (direct) {
+        const alt = DS.liveAlt(direct);
+        if (alt) items.push({ key: alt.key, label: DS.label(alt.key), name: DS.nameOf(direct) || DS.nameOf(alt.key), exch: '⚡ 실시간 · 바이낸스' + (ALT_NOTE[alt.kind] ? ' · ' + ALT_NOTE[alt.kind] : '') });
+        items.push({ key: direct, label: DS.label(direct), name: DS.nameOf(direct) || '바로 열기', exch: DS.sourceLabel(direct) + (direct.startsWith('YAHOO:') ? ' · 지연 · 긴 과거 (PC 서버)' : '') });
+      }
       for (const x of DS.localSearch(q)) if (!items.some(y => y.key && y.key === x.key)) items.push({ ...x, label: x.key ? DS.label(x.key) : x.id });
       paint();
       clearTimeout(tmr);
@@ -2309,8 +2369,12 @@ const UI = (() => {
     $('nDisc').textContent = disc.rows.length ? ' ' + disc.rows.length : '';
     $('wlHead').hidden = ST.sideTab !== 'wl';
     const head = $('listHead'), list = $('list');
-    const rowHtml = (key, small, third, extra = '') => `<div class="row${key === ST.key ? ' cur' : ''}" data-key="${esc(key)}"${extra}><span class="s"><b>${esc(DS.label(key))}</b><small>${esc(small)}</small></span>
-      <span class="num p">${fpx(px[key]?.price)}</span><span class="num c">${third}</span>${ST.sideTab === 'wl' ? '<button class="x" title="목록에서 빼기">×</button>' : ''}</div>`;
+    const rowHtml = (key, small, third, extra = '') => {
+      const alt = key.startsWith('YAHOO:') && DS.srv.ok !== true ? DS.liveAlt(key) : null, pk = alt ? alt.key : key;
+      const cur = key === ST.key || pk === ST.key;
+      return `<div class="row${cur ? ' cur' : ''}" data-key="${esc(key)}" data-pk="${esc(pk)}"${extra}><span class="s"><b>${esc(DS.label(key))}${alt ? ' <i class="zap" title="바이낸스 실시간으로 표시">⚡</i>' : ''}</b><small>${esc(alt ? DS.label(alt.key) + ' 실시간' : small)}</small></span>
+      <span class="num p">${fpx(px[pk]?.price)}</span><span class="num c">${alt ? chgHtml(pk) : third}</span>${ST.sideTab === 'wl' ? '<button class="x" title="목록에서 빼기">×</button>' : ''}</div>`;
+    };
     if (ST.sideTab === 'wl') {
       head.innerHTML = '<span>심볼</span><span>현재가</span><span>변동%</span>';
       const L = curList();
@@ -2333,7 +2397,7 @@ const UI = (() => {
   const chgHtml = (k, fallback) => { const c = px[k]?.chgPct ?? fallback; return c == null ? '-' : `<span class="${c >= 0 ? 'pos' : 'neg'}">${fpc(c)}</span>`; };
   function paintPrices() {
     for (const row of $('list').querySelectorAll('.row[data-key]')) {
-      const k = row.dataset.key, q = px[k]; if (!q) continue;
+      const k = row.dataset.pk || row.dataset.key, q = px[k]; if (!q) continue;
       if (ST.sideTab !== 'scan') { row.querySelector('.p').textContent = fpx(q.price); row.querySelector('.c').innerHTML = chgHtml(k); }
     }
   }
@@ -2360,6 +2424,11 @@ const UI = (() => {
     $('wlMenu').onclick = e => showMenu(e.currentTarget, [
       ['새 관심목록', async () => { const n = await askText('새 관심목록 이름', '새 목록'); if (n) { ST.lists.push({ name: n, items: [] }); ST.active = ST.lists.length - 1; save(); renderWlSel(); renderList(); } }],
       ['이름 바꾸기', async () => { const n = await askText('목록 이름', curList().name); if (n) { curList().name = n; save(); renderWlSel(); } }],
+      ['실시간(바이낸스) 종목으로 바꾸기', () => {
+        const L = curList(); let n = 0;
+        L.items = L.items.map(k => { const a = DS.liveAlt(k); if (a && !L.items.includes(a.key)) { n++; return a.key; } return k; });
+        save(); renderList(); paintStar(); toast(n ? `${n}개를 바이낸스 실시간 종목으로 바꿨습니다` : '바꿀 수 있는 종목이 없습니다');
+      }],
       ['구분선 추가', async () => { const n = await askText('구분선 이름', '새 구역'); if (n) { curList().items.push('###' + n); save(); renderList(); } }],
       ['정렬: 변동률 높은 순', () => sortList((a, b) => (px[b]?.chgPct ?? -1e9) - (px[a]?.chgPct ?? -1e9))],
       ['정렬: 이름순', () => sortList((a, b) => DS.label(a).localeCompare(DS.label(b)))],
@@ -2460,8 +2529,13 @@ const UI = (() => {
   }
 
   // ---------------- 차트 열기 ----------------
+  const ALT_NOTE = { spot: '현물 기준', usd: '달러 가격', etf: 'ETF로 대신', same: '' };
   function openChart(key, tab) {
     if (!key) return;
+    if (key.startsWith('YAHOO:') && DS.srv.ok !== true) {
+      const alt = DS.liveAlt(key);
+      if (alt) { toast(`${DS.label(key)} → ${DS.label(alt.key)} 바이낸스 실시간으로 열었습니다${ALT_NOTE[alt.kind] ? ' (' + ALT_NOTE[alt.kind] + ')' : ''}`, 4000); key = alt.key; }
+    }
     ST.key = key; if (tab) ST.sideTab = tab; save();
     setView('chart');
     $('symLbl').textContent = DS.label(key); paintStar();
