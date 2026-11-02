@@ -3003,7 +3003,9 @@ const DISC = (() => {
     status('코인게코 시가총액 목록 받는 중…');
     let coins = await DS.cgMarkets(1);
     let note = '';
-    coins = coins.filter(c => !STABLE.has(String(c.symbol).toUpperCase()) && !/wrapped|staked|bridged|restaked|liquid staking|tokenized/i.test(c.name));
+    // 스테이블코인·랩핑·토큰화 자산(국채·대출채권 등) 제외
+    coins = coins.filter(c => !STABLE.has(String(c.symbol).toUpperCase()) && !String(c.symbol).includes('_')
+      && !/wrapped|staked|bridged|restaked|liquid staking|tokenized|treasury|heloc|\byield\b|\b(usd|eur|euro|dollar)\b/i.test(c.name));
     let base;
     if (o.mode === 'trending') {
       status('코인게코 트렌딩…');
@@ -3043,7 +3045,11 @@ const DISC = (() => {
     if (yah.length && DS.srv.ok) {
       try { const st = await DS.api('/api/yf/trend', { symbols: yah.map(r => DS.parseKey(r.key).id).join(',') }); for (const r of yah) Object.assign(r, pickStats(st[DS.parseKey(r.key).id])); } catch {}
     }
-    return { rows: out, note: note || '시가총액 코인게코 · 추세 바이낸스 일봉' + (yah.length ? ` · 바이낸스에 없는 ${yah.length}개는 야후` : '') };
+    // PC 서버가 없으면 바이낸스에 없는 코인은 차트를 열 수 없으므로 빼고 개수만 알림
+    let rows = out, dropped = 0;
+    if (!DS.srv.ok && yah.length) { rows = out.filter(r => r.key.startsWith('BINANCE:')); dropped = yah.length; }
+    return { rows, note: note || '시가총액 코인게코 · 추세 바이낸스 일봉'
+      + (dropped ? ` · 바이낸스 선물에 없는 ${dropped}개 제외 (PC 서버를 켜면 야후로 표시)` : yah.length ? ` · 바이낸스에 없는 ${yah.length}개는 야후` : '') };
   }
   const pickStats = s => s ? { ret1m: s.ret1m, ret3m: s.ret3m, ret1y: s.ret1y, r2: s.r2, slopeAnn: s.slopeAnn, steady: s.steady, maxDD: s.maxDD,
     volRatio: s.volRatio, above200: s.above200, spark: s.spark, chgPct1d: s.chgPct } : {};
