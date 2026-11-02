@@ -490,7 +490,7 @@ table.mini th,table.mini td{padding:3px 8px;text-align:left;position:static;curs
       <div class="summary" id="dSummary"></div>
       <div class="tbl"><table><thead><tr id="dHead"></tr></thead><tbody id="dBody"><tr><td colspan="14" class="empty">시장과 기준을 고르고 「찾기」를 누르세요.</td></tr></tbody></table></div>
       <div class="note">
-        <div><b>꾸준한 상승.</b> 최근 120개 일봉의 로그 가격에 직선을 맞춰, 기울기(연환산 %)와 R²(직선에 얼마나 붙어 오르는지, 1에 가까울수록 매끄러움)를 구합니다. 꾸준함 점수 = R² × 연환산 로그 수익률. 급등 후 급락한 종목보다 계단처럼 오른 종목이 위로 옵니다.</div>
+        <div><b>꾸준한 상승.</b> 최근 120개 일봉의 로그 가격에 직선을 맞춰, 그 직선 기준 120일 수익률(추세)과 R²(직선에 얼마나 붙어 오르는지, 1에 가까울수록 매끄러움)를 구합니다. 꾸준함 점수 = R² × 120일 로그 수익률. 급등 후 급락한 종목보다 계단처럼 오른 종목이 위로 오고, 상장 120일 미만 종목은 뺍니다.</div>
         <div><b>거래량 급증.</b> 마지막 일봉 거래량 ÷ 직전 20일 평균. 장중에는 오늘 거래량이 덜 쌓여 낮게 나옵니다.</div>
         <div><b>인기·트렌딩.</b> 크립토는 코인게코 검색 트렌딩, 미국 주식은 야후 트렌딩입니다. 한국 트렌딩은 야후가 제공하지 않으면 거래량 순으로 대신합니다.</div>
         <div><b>데이터 출처.</b> 크립토 시가총액: <a href="https://www.coingecko.com/" target="_blank" rel="noopener">CoinGecko</a> 무료 API (분당 약 5회 제한, 10분 저장). 주식: Yahoo Finance (개인 용도). 시세는 지연될 수 있습니다.</div>
@@ -653,7 +653,7 @@ const IND = (() => {
     const tail = c.slice(-90), stp = Math.max(1, Math.floor(tail.length / 45));
     const d = ann === 252 ? [21, 63, 126, 251] : [30, 90, 180, 364];
     return { price: lastC, chgPct: ret(1), ret1m: ret(d[0]), ret3m: ret(d[1]), ret6m: ret(d[2]), ret1y: ret(Math.min(n - 1, d[3])),
-      slopeAnn: (Math.exp(b * ann) - 1) * 100, r2, steady: r2 * b * ann * 100, maxDD: dd,
+      slopeAnn: (Math.exp(b * ann) - 1) * 100, trend: (Math.exp(b * (w - 1)) - 1) * 100, win: w, r2, steady: r2 * b * (w - 1) * 100, maxDD: dd,
       volRatio: base.length >= 10 && bs > 0 ? v[v.length - 1] / (bs / base.length) : null,
       above200: ma200 ? lastC > ma200 : null, spark: tail.filter((_, i) => i % stp === 0), bars: n };
   }
@@ -2442,7 +2442,7 @@ const UI = (() => {
       if (f.mcap) rows.push(['시가총액', fbig(f.mcap, f.currency)]);
       if (f.turnover) rows.push(['거래대금', fbig(f.turnover, f.currency)]);
       if (f.volRatio) rows.push(['거래량 배수 (20일)', f.volRatio.toFixed(2) + '배']);
-      if (f.r2 != null) rows.push(['꾸준함 R² · 추세 연%', `${f.r2.toFixed(2)} · ${fpc(f.slopeAnn)}`]);
+      if (f.r2 != null) rows.push(['꾸준함 R² · 추세 120일', `${f.r2.toFixed(2)} · ${fpc(f.trend)}`]);
       if (f.ret3m != null) rows.push(['1개월 · 3개월', `${fpc(f.ret1m)} · ${fpc(f.ret3m)}`]);
     }
     if (s) {
@@ -2985,7 +2985,7 @@ const DISC = (() => {
   const $ = id => document.getElementById(id);
   const { esc, fpx, fpc, fbig } = UI;
   const COLS = [['rank', '#'], ['sym', '종목'], ['name', '이름'], ['price', '현재가'], ['chgPct', '1일'], ['ret1m', '1개월'], ['ret3m', '3개월'],
-    ['mcap', '시가총액'], ['turnover', '거래대금'], ['volRatio', '거래량 배수'], ['r2', '꾸준함 R²'], ['slopeAnn', '추세 (연%)'], ['maxDD', '최대 낙폭'], ['spark', '최근 90일']];
+    ['mcap', '시가총액'], ['turnover', '거래대금'], ['volRatio', '거래량 배수'], ['r2', '꾸준함 R²'], ['trend', '추세 (120일)'], ['maxDD', '최대 낙폭'], ['spark', '최근 90일']];
   const STABLE = new Set(['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDE', 'USDS', 'PYUSD', 'USDD', 'BUSD', 'FRAX', 'USD1', 'RLUSD', 'USDX', 'GHO',
     'CRVUSD', 'LUSD', 'SUSD', 'EURC', 'USDB', 'USD0', 'USDTB', 'BFUSD', 'SUSDE', 'SUSDS', 'USYC', 'BUIDL', 'USDF', 'USDG', 'USTB', 'OUSG']);
   let rows = [], sortKey = 'rank', sortAsc = true, running = false;
@@ -3051,7 +3051,7 @@ const DISC = (() => {
     return { rows, note: note || '시가총액 코인게코 · 추세 바이낸스 일봉'
       + (dropped ? ` · 바이낸스 선물에 없는 ${dropped}개 제외 (PC 서버를 켜면 야후로 표시)` : yah.length ? ` · 바이낸스에 없는 ${yah.length}개는 야후` : '') };
   }
-  const pickStats = s => s ? { ret1m: s.ret1m, ret3m: s.ret3m, ret1y: s.ret1y, r2: s.r2, slopeAnn: s.slopeAnn, steady: s.steady, maxDD: s.maxDD,
+  const pickStats = s => s ? { ret1m: s.ret1m, ret3m: s.ret3m, ret1y: s.ret1y, r2: s.r2, slopeAnn: s.slopeAnn, trend: s.trend, bars: s.bars, steady: s.steady, maxDD: s.maxDD,
     volRatio: s.volRatio, above200: s.above200, spark: s.spark, chgPct1d: s.chgPct } : {};
 
   // ---------- 주식 (야후) ----------
@@ -3108,7 +3108,8 @@ const DISC = (() => {
       if (o.minR2 != null) list = list.filter(r => r.r2 != null && r.r2 >= o.minR2);
       if (o.minRet != null) list = list.filter(r => r.ret3m != null && r.ret3m >= o.minRet);
       if (o.above200) list = list.filter(r => r.above200 === true);
-      if (o.mode === 'steady') list = list.filter(r => r.steady != null && r.slopeAnn > 0);
+      // 꾸준한 상승: 상장 120일 이상 + 추세 상승인 것만 (갓 상장한 급등 코인 제외)
+      if (o.mode === 'steady') list = list.filter(r => r.steady != null && r.trend > 0 && (r.bars ?? 0) >= 120);
       list = finalSort(list, o.mode);
       list.forEach((r, i) => r.rank = i + 1);
       rows = list; sortKey = 'rank'; sortAsc = true; render();
@@ -3118,7 +3119,7 @@ const DISC = (() => {
       status(`완료 ${new Date().toLocaleTimeString('ko-KR')} · ${((performance.now() - t0) / 1000).toFixed(1)}초 · 행을 누르면 차트`);
       $('dAddAll').disabled = $('dScan').disabled = !rows.length;
       UI.setDiscResults(rows.map(r => ({ key: r.key, name: r.name, price: r.price, chgPct: r.chgPct, mcap: r.mcap, turnover: r.turnover, currency: r.currency,
-        volRatio: r.volRatio, r2: r.r2, slopeAnn: r.slopeAnn, ret1m: r.ret1m, ret3m: r.ret3m })), desc);
+        volRatio: r.volRatio, r2: r.r2, slopeAnn: r.slopeAnn, trend: r.trend, ret1m: r.ret1m, ret3m: r.ret3m })), desc);
     } catch (e) { status('실패: ' + e.message); }
     finally { $('dRun').disabled = false; running = false; prog(0, 1); }
   }
@@ -3140,7 +3141,7 @@ const DISC = (() => {
       case 'turnover': return fbig(r.turnover, r.currency);
       case 'volRatio': return r.volRatio == null ? '-' : `<span class="${r.volRatio >= 2 ? 'lv' : ''}">${r.volRatio.toFixed(2)}</span>`;
       case 'r2': return r.r2 == null ? '-' : `<span class="${r.r2 >= 0.8 ? 'lv' : ''}">${r.r2.toFixed(2)}</span>`;
-      case 'slopeAnn': return pc(r.slopeAnn);
+      case 'trend': return pc(r.trend);
       case 'maxDD': return r.maxDD == null ? '-' : `<span class="neg">${r.maxDD.toFixed(1)}%</span>`;
       case 'spark': return spark(r.spark, (r.ret3m ?? 0) >= 0);
     }

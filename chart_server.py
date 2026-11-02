@@ -243,7 +243,7 @@ def quotes(symbols):
 def trend_stats(closes, vols, ann=252):
     """꾸준한 상승 지표 (브라우저 IND.trendStats와 같은 정의)
     로그 가격의 최근 120봉 선형회귀: 기울기 → 연환산 %, R² = 얼마나 일직선인지
-    steady = R² × 연환산 로그수익률(%)  → 크고 매끄럽게 오를수록 큼"""
+    trend = 회귀선 기준 최근 w봉 동안 수익률(%), steady = R² × 그 기간 로그수익률(%) → 크고 매끄럽게 오를수록 큼"""
     c = [x for x in closes if x and x > 0]
     n = len(c)
     if n < 30:
@@ -271,7 +271,8 @@ def trend_stats(closes, vols, ann=252):
     stepn = max(1, len(tail) // 45)
     return {"price": last, "chgPct": ret(1), "ret1m": ret(21 if ann == 252 else 30), "ret3m": ret(63 if ann == 252 else 90),
             "ret6m": ret(126 if ann == 252 else 180), "ret1y": ret(min(n - 1, 251 if ann == 252 else 364)),
-            "slopeAnn": (math.exp(b * ann) - 1) * 100, "r2": r2, "steady": r2 * b * ann * 100,
+            "slopeAnn": (math.exp(b * ann) - 1) * 100, "trend": (math.exp(b * (w - 1)) - 1) * 100, "win": w,
+            "r2": r2, "steady": r2 * b * (w - 1) * 100,
             "maxDD": dd, "volRatio": vol_ratio, "above200": (last > ma200) if ma200 else None,
             "spark": [round(x, 6) for x in tail[::stepn]], "bars": n}
 
