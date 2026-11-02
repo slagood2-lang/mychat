@@ -1704,7 +1704,7 @@ const CH = (() => {
   let scanInfo = () => null;   // 스캔 결과 조회 (app.js가 연결)
   // 차트 설정 (트레이딩뷰 「차트 설정」과 같은 항목)
   const CFG_DEFAULT = { type: 'candle', up: '#089981', down: '#f23645', wick: true, border: true, bg: '', gridV: true, gridH: true,
-    crosshair: 'normal', legendOHLC: true, legendValues: true, lastLine: true, scale: 'log', rightOffset: 12, watermark: false };
+    crosshair: 'normal', scalePriceOnly: true, legendOHLC: true, legendValues: true, lastLine: true, scale: 'log', rightOffset: 12, watermark: false };
   let cfg = { ...CFG_DEFAULT };
   let pendingRange = null;
 
@@ -2018,6 +2018,7 @@ const CH = (() => {
     up: () => css('--up'), dn: () => css('--down'), muted: () => css('--muted'),
   };
   const lineOpts = (color, w = 1, extra = {}) => ({ color, lineWidth: w, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, ...extra });
+  const ov = o => cfg.scalePriceOnly ? { ...o, autoscaleInfoProvider: () => null } : o;
   const SRC_OPTS = [['close', '종가'], ['open', '시가'], ['high', '고가'], ['low', '저가'], ['hl2', '(고+저)/2'], ['hlc3', '(고+저+종)/3']];
 
   const TYPES = {
@@ -2046,7 +2047,7 @@ const CH = (() => {
       defaults: { len: 450, src: 'close', color: '#f0b429', w: 2 },
       title: i => `MA ${i.p.len}`,
       create(env, inst) {
-        const s = chart.addSeries(LW().LineSeries, lineOpts(inst.p.color, inst.p.w, { lastValueVisible: true }));
+        const s = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.color, inst.p.w, { lastValueVisible: true })));
         let v = [];
         return { fill() { v = IND.smaP(srcOf(inst.p.src), inst.p.len); s.setData(line(v)); }, values: i => [{ c: inst.p.color, t: fp(v[i]) }] };
       },
@@ -2057,7 +2058,7 @@ const CH = (() => {
       defaults: { len: 450, src: 'close', color: '#3b82f6', w: 2 },
       title: i => `EMA ${i.p.len}`,
       create(env, inst) {
-        const s = chart.addSeries(LW().LineSeries, lineOpts(inst.p.color, inst.p.w, { lastValueVisible: true }));
+        const s = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.color, inst.p.w, { lastValueVisible: true })));
         let v = [];
         return { fill() { v = IND.emaP(srcOf(inst.p.src), inst.p.len); s.setData(line(v)); }, values: i => [{ c: inst.p.color, t: fp(v[i]) }] };
       },
@@ -2068,8 +2069,8 @@ const CH = (() => {
       defaults: { len: 20, mult: 2, color: '#2962ff' },
       title: i => `BB ${i.p.len} ${i.p.mult}`,
       create(env, inst) {
-        const a = chart.addSeries(LW().LineSeries, lineOpts(inst.p.color)), b = chart.addSeries(LW().LineSeries, lineOpts(inst.p.color)),
-          m = chart.addSeries(LW().LineSeries, lineOpts(inst.p.color, 1, { lineStyle: 2 }));
+        const a = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.color))), b = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.color))),
+          m = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.color, 1, { lineStyle: 2 })));
         let r = null;
         return { fill() { r = IND.bb(D.C, inst.p.len, inst.p.mult); a.setData(line(r.up)); b.setData(line(r.lo)); m.setData(line(r.mid)); },
           values: i => [{ c: inst.p.color, t: `${fp(r.mid[i])} ${fp(r.up[i])} ${fp(r.lo[i])}` }] };
@@ -2082,14 +2083,14 @@ const CH = (() => {
       defaults: { h: 8, mult: 3, repaint: true, upColor: '#089981', dnColor: '#f23645' },
       title: i => `NWE ${i.p.h} ${i.p.mult}${i.p.repaint ? ' · Repainting' : ''}`,
       create(env, inst) {
-        const u = chart.addSeries(LW().LineSeries, lineOpts(inst.p.upColor, 1, { lineStyle: 2, lastValueVisible: true })),
-          d = chart.addSeries(LW().LineSeries, lineOpts(inst.p.dnColor, 1, { lineStyle: 2, lastValueVisible: true }));
+        const u = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.upColor, 1, { lineStyle: 2, lastValueVisible: true }))),
+          d = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.dnColor, 1, { lineStyle: 2, lastValueVisible: true })));
         let r = null;
         return {
           fill() {
             r = inst.p.repaint ? IND.nweRepaint(D.C, inst.p.h, inst.p.mult) : IND.nweEndpoint(D.C, inst.p.h, inst.p.mult);
             if (!r) { u.setData([]); d.setData([]); overlay.set(inst.id, null); return; }
-            const mk = arr => arr.map((v, k) => ({ time: D.T[r.start + k], value: v })).filter(x => isFinite(x.value));
+            const mk = arr => arr.map((v, k) => ({ time: D.T[r.start + k], value: v })).filter(x => isFinite(x.value) && (cfg.scale !== 'log' || x.value > 0));
             u.setData(mk(r.up)); d.setData(mk(r.lo));
             overlay.set(inst.id, { texts: r.arrows.map(a => a.dir === 'up'
               ? { i: a.i, p: D.L[a.i], dy: 16, text: '▲', color: inst.p.upColor, font: '13px sans-serif' }
@@ -3236,6 +3237,7 @@ const UI = (() => {
       <b>캔버스</b>
       <div class="grid2"><label>배경<input type="color" id="cBg" value="${c.bg || getComputedStyle(document.documentElement).getPropertyValue('--chart-bg').trim() || '#131722'}"></label>
         <label>십자선${sel('cCross', c.crosshair, [['normal', '자유'], ['magnet', '자석 (종가에 붙음)']])}</label>
+        ${chk('cPriceOnly', c.scalePriceOnly, '가격 차트에만 스케일 맞추기')}
         ${chk('cGridV', c.gridV, '세로 격자')}${chk('cGridH', c.gridH, '가로 격자')}${chk('cWm', c.watermark, '심볼 워터마크')}
         <label>오른쪽 여백 (봉)<input type="number" id="cOff" min="0" max="100" value="${c.rightOffset}"></label></div>
       <b>화면</b>
@@ -3251,7 +3253,7 @@ const UI = (() => {
       setCfg({ type: v('cType').value, scale: v('cScale').value, up: v('cUp').value, down: v('cDn').value, border: v('cBorder').checked, wick: v('cWick').checked,
         lastLine: v('cLast').checked, legendOHLC: v('cOHLC').checked, legendValues: v('cVals').checked,
         bg: bg.toLowerCase() === themeBg.toLowerCase() && !bgDefault ? '' : bg, crosshair: v('cCross').value, gridV: v('cGridV').checked, gridH: v('cGridH').checked,
-        watermark: v('cWm').checked, rightOffset: +v('cOff').value || 0 });
+        watermark: v('cWm').checked, scalePriceOnly: v('cPriceOnly').checked, rightOffset: +v('cOff').value || 0 });
       ST.log = CH.cfg.scale === 'log'; save();
     };
   }
