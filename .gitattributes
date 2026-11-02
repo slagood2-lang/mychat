@@ -1,0 +1,3 @@
+*.bat -text
+README.txt -text
+*.command text eol=lf
