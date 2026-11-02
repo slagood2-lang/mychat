@@ -2325,7 +2325,7 @@ const CH = (() => {
   const DEFAULT_LAYOUT = () => [
     mkInst('vol'), mkInst('ema', { len: 450, color: '#3b82f6' }), mkInst('ma', { len: 450, color: '#f0b429' }),
     mkInst('ema', { len: 2000, color: '#a855f7' }), mkInst('ma', { len: 2000, color: '#ec4899' }),
-    mkInst('nwe'), mkInst('td'), mkInst('autofib', {}, false), mkInst('zones'), mkInst('wt', {}, false),
+    mkInst('nwe'), mkInst('td'), mkInst('autofib', {}, false), mkInst('zones'), mkInst('wt', {}, false), mkInst('oi'), mkInst('funding'),
   ];
   function mkInst(type, p = {}, visible = true) {
     return { id: type + '_' + Math.random().toString(36).slice(2, 8), type, visible, p: { ...TYPES[type].defaults, ...p } };
@@ -2446,6 +2446,7 @@ const CH = (() => {
     applyLogMode();
     if (range) chart.timeScale().setVisibleLogicalRange(range);
     else if (pendingRange) applyRange(pendingRange);
+    else if (['1w', '1M', '1y'].includes(S.tf)) chart.timeScale().fitContent();   // 주봉 이상은 처음부터 전체
     else chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, D.N - 180), to: D.N + 8 });
     pendingRange = null;
     chart.subscribeCrosshairMove(p => updateLegendValues(p.logical != null && p.time !== undefined ? Math.round(p.logical) : null));
