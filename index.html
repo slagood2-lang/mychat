@@ -2061,7 +2061,9 @@ const CH = (() => {
     const col = d.style.color || css('--draw'), P = g.handles;
     const line = s => { ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); ctx.stroke(); };
     ctx.strokeStyle = col; ctx.fillStyle = col;
-    const pfx = (p) => fp(p);
+    // 지표 패널은 값 크기에 맞춰 짧게 (OI 4.44B, RSI 48.80)
+    const pfx = (p) => (d.pane || 'main') === 'main' ? fp(p) : Math.abs(p) >= 1e9 ? (p / 1e9).toFixed(2) + 'B' : Math.abs(p) >= 1e6 ? (p / 1e6).toFixed(2) + 'M'
+      : Math.abs(p) >= 1e4 ? (p / 1e3).toFixed(1) + 'K' : Math.abs(p) >= 1 ? p.toFixed(2) : p.toPrecision(3);
     switch (d.type) {
       case 'hline': case 'hray':
         line(g.segs[0]); label(ctx, pfx(d.p[0].p), sz.width, P[0][1], col, '#fff', 'right'); break;
