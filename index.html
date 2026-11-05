@@ -112,6 +112,7 @@ button{cursor:pointer}
 body:not([data-view="chart"]) .chart-only{display:none!important}
 .lg-row{display:flex;align-items:center;gap:6px;font-size:12px;pointer-events:auto;width:max-content;max-width:100%;padding:1px 4px;margin-left:-4px;border-radius:4px;border:1px solid transparent}
 .lg-row:hover{border-color:var(--line);background:color-mix(in srgb,var(--chart-bg) 85%,transparent)}
+#legend.through .lg-row,#legend.through .lg-main{pointer-events:none}
 .lg-row .nm{color:var(--fg)}
 .lg-row.off .nm,.lg-row.off .vals{opacity:.45}
 .lg-row .vals{font:11.5px var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
@@ -317,6 +318,10 @@ table.mini th,table.mini td{padding:3px 8px;text-align:left;position:static;curs
 .selbar .sw::before{content:"";width:16px;height:16px;border-radius:3px;background:var(--c);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
 .selbar .sw input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .selbar .sep{width:1px;height:18px;background:var(--line);margin:0 3px}
+.srf{display:flex;gap:4px;flex-wrap:wrap;margin:-2px 0 2px}
+.srf button{font-size:11.5px;padding:3px 9px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted)}
+.srf button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.srf button:hover:not(.on){background:var(--chip);color:var(--fg)}
 @media (max-width:980px){
   body{overflow:auto}
   .app{height:auto;min-height:100%}
@@ -1478,22 +1483,44 @@ const DS = (() => {
     '^KS200': '코스피 200', '^VIX': '변동성 지수', 'DX-Y.NYB': '달러 인덱스', '^N225': '닛케이 225', '^TNX': '미 10년물 금리', 'KRW=X': '원/달러',
     '^HSI': '항셍', '^SOX': '필라델피아 반도체', '^RUT': '러셀 2000' };
   const ALIAS = Object.fromEntries(Object.entries(IDX).map(([y, a]) => [a, y]));
-  Object.assign(ALIAS, { GOLD: 'GC=F', SILVER: 'SI=F', XAUUSD: 'GC=F', XAGUSD: 'SI=F', USOIL: 'CL=F', UKOIL: 'BZ=F', SPX500: '^GSPC',
-    NAS100: '^NDX', US100: '^NDX', US500: '^GSPC', JP225: '^N225', COPPER: 'HG=F', NATGAS: 'NG=F' });
+  Object.assign(ALIAS, { GOLD: 'GC=F', SILVER: 'SI=F', XAUUSD: 'GC=F', XAGUSD: 'SI=F', XAU: 'GC=F', XAG: 'SI=F', XPT: 'PL=F', XPD: 'PA=F',
+    XPTUSD: 'PL=F', XPDUSD: 'PA=F', PLATINUM: 'PL=F', PALLADIUM: 'PA=F', USOIL: 'CL=F', UKOIL: 'BZ=F', WTI: 'CL=F', OIL: 'CL=F', CRUDE: 'CL=F',
+    BRENT: 'BZ=F', SPX500: '^GSPC', NAS100: '^NDX', US100: '^NDX', US500: '^GSPC', US30: '^DJI', JP225: '^N225', COPPER: 'HG=F',
+    NATGAS: 'NG=F', NATURALGAS: 'NG=F', NASDAQ: '^NDX', 'S&P': '^GSPC', 'S&P500': '^GSPC', SP500: '^GSPC', DOW: '^DJI', DOWJONES: '^DJI',
+    NIKKEI: '^N225', HANGSENG: '^HSI', RUSSELL: '^RUT', RUSSELL2000: '^RUT' });
+  // 한글 이름 → 심볼 (코인 · 원자재 · 지수 · 미국 주식). 한국 주식 이름은 KR_NAMES에서
+  const KO = { '비트코인': 'BTC', '비트': 'BTC', '이더리움': 'ETH', '이더': 'ETH', '리플': 'XRP', '솔라나': 'SOL', '도지': 'DOGE', '도지코인': 'DOGE',
+    '에이다': 'ADA', '카르다노': 'ADA', '비앤비': 'BNB', '바이낸스코인': 'BNB', '트론': 'TRX', '아발란체': 'AVAX', '체인링크': 'LINK', '링크': 'LINK',
+    '라이트코인': 'LTC', '폴카닷': 'DOT', '수이': 'SUI', '페페': 'PEPE', '시바': 'SHIB', '시바이누': 'SHIB', '하이퍼리퀴드': 'HYPE', '톤': 'TON',
+    '톤코인': 'TON', '유니스왑': 'UNI', '니어': 'NEAR', '앱토스': 'APT', '아비트럼': 'ARB', '옵티미즘': 'OP', '폴리곤': 'POL', '코스모스': 'ATOM',
+    '스텔라': 'XLM', '헤데라': 'HBAR', '비트코인캐시': 'BCH', '이더리움클래식': 'ETC', '파일코인': 'FIL', '샌드박스': 'SAND', '디센트럴랜드': 'MANA',
+    '엑시': 'AXS', '갈라': 'GALA', '에이프': 'APE', '월드코인': 'WLD', '온도': 'ONDO', '주피터': 'JUP', '봉크': 'BONK', '플로키': 'FLOKI',
+    '위프': 'WIF', '펭구': 'PENGU', '트럼프': 'TRUMP', '비트코인도미넌스': 'BTCDOM', '도미넌스': 'BTCDOM', '이오스': 'EOS', '알고랜드': 'ALGO',
+    '세이': 'SEI', '타오': 'TAO', '렌더': 'RENDER', '에테나': 'ENA', '버추얼': 'VIRTUAL', '카이아': 'KAIA', '크로노스': 'CRO', '모네로': 'XMR',
+    '금': 'XAU', '은': 'XAG', '백금': 'XPT', '팔라듐': 'XPD', '원유': 'CL', '유가': 'CL', '브렌트': 'BZ', '천연가스': 'NG', '구리': 'HG',
+    '나스닥': 'NDX', '나스닥100': 'NDX', '에스앤피': 'SPX', '에센피': 'SPX', '다우': 'DJI', '코스피': 'KOSPI', '코스닥': 'KOSDAQ', '닛케이': 'NI225',
+    '항셍': 'HSI', '달러인덱스': 'DXY', '환율': 'USDKRW', '원달러': 'USDKRW', '공포지수': 'VIX', '반도체지수': 'SOX', '러셀': 'RUT',
+    '테슬라': 'TSLA', '애플': 'AAPL', '엔비디아': 'NVDA', '마이크로소프트': 'MSFT', '아마존': 'AMZN', '구글': 'GOOGL', '알파벳': 'GOOGL', '메타': 'META',
+    '팔란티어': 'PLTR', '코인베이스': 'COIN', '마이크로스트래티지': 'MSTR', '스트래티지': 'MSTR', '로빈후드': 'HOOD', '서클': 'CRCL', '인텔': 'INTC',
+    '브로드컴': 'AVGO', '마이크론': 'MU', '오라클': 'ORCL', '넷플릭스': 'NFLX', '디즈니': 'DIS', '우버': 'UBER', '월마트': 'WMT', '코카콜라': 'KO',
+    '맥도날드': 'MCD', '나이키': 'NKE', '버크셔': 'BRK.B', '티에스엠씨': 'TSM', '알리바바': 'BABA', '텐센트': 'HK0700', '오픈AI': 'OPENAI',
+    '오픈에이아이': 'OPENAI', '앤트로픽': 'ANTHROPIC', '큐큐큐': 'QQQ', '스파이': 'SPY' };
   const names = {};   // key → 이름 (검색·메타에서 채움)
 
   // 야후 종목(지연·긴 과거) ↔ 바이낸스 TradFi 무기한(실시간·2025-12 이후 과거만) 대응
   const FUT_ALT = { SI: 'XAG', GC: 'XAU', PL: 'XPT', PA: 'XPD', HG: 'COPPER', CL: 'CL', BZ: 'BZ', NG: 'NATGAS' };
+  const FUT_ETF = { ES: 'SPY', NQ: 'QQQ', RTY: 'IWM' };   // 지수 선물 → 같은 지수 ETF 무기한
   const KR_ALT = { '005930': 'SAMSUNG', '000660': 'SKHYNIX', '005380': 'HYUNDAI', '042700': 'HANMI', '066570': 'LGELECTRONICS',
     '035420': 'NAVER', '069500': 'KODEX200', '009150': 'SAMSUNGEM' };
-  const IDX_ALT = { '^GSPC': 'SPY', '^NDX': 'QQQ', '^IXIC': 'QQQ', '^RUT': 'IWM', '^KS200': 'KODEX200', '^KS11': 'KODEX200', '^SOX': 'SMH' };
+  const IDX_ALT = { '^GSPC': 'SPY', '^NDX': 'QQQ', '^IXIC': 'QQQ', '^RUT': 'IWM', '^KS200': 'KODEX200', '^KS11': 'KODEX200', '^SOX': 'SMH',
+    '^N225': 'EWJ', '^TWII': 'EWT', '^BVSP': 'EWZ' };
   Object.assign(KR_NAMES, { '042700': '한미반도체', '069500': 'KODEX 200', '009150': '삼성전기' });
   Object.assign(KR_BY_NAME, { '한미반도체': '042700', 'KODEX200': '069500', 'KODEX 200': '069500', '삼성전기': '009150' });
   function liveAlt(key) {
     if (!key || !key.startsWith('YAHOO:')) return null;
     const id = key.slice(6); let base = null, kind = 'same';
     const f = id.match(/^([A-Z0-9]{1,4})=F$/);
-    if (f) { base = FUT_ALT[f[1]]; kind = 'spot'; }
+    if (f) { if (FUT_ETF[f[1]]) { base = FUT_ETF[f[1]]; kind = 'etf'; } else { base = FUT_ALT[f[1]]; kind = 'spot'; } }
     else if (/^\d{6}\.K[SQ]$/.test(id)) { base = KR_ALT[id.slice(0, 6)]; kind = 'usd'; }
     else if (IDX_ALT[id]) { base = IDX_ALT[id]; kind = 'etf'; }
     else if (/^[A-Z]{1,5}(-[A-Z])?$/.test(id)) base = id.replace('-', '');
@@ -1619,6 +1646,7 @@ const DS = (() => {
   function resolveSync(raw) {
     let s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
     if (!s || s.startsWith('###')) return null;
+    if (KO[s]) s = KO[s].toUpperCase();
     if (s.startsWith('YAHOO:')) return 'YAHOO:' + s.slice(6);
     if (TV_MAP[s]) return 'YAHOO:' + TV_MAP[s];
     if (KR_BY_NAME[s]) return null;   // 한글 이름은 resolve()에서 코드 확인
@@ -1641,6 +1669,7 @@ const DS = (() => {
       if (ex && base !== perp) return 'YAHOO:' + base + '-USD';
     }
     if (!ex && isCryptoBase(sym)) return 'BINANCE:' + sym + 'USDT';
+    if (!ex && /^[A-Z0-9]{2,10}$/.test(sym)) for (const c of ['1000' + sym + 'USDT', '1000000' + sym + 'USDT', '1M' + sym + 'USDT']) if (bx.syms.has(c)) return 'BINANCE:' + c;
     if (!ex || US_EX.has(ex) || ex === 'AMEX') {
       if (/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym)) return 'YAHOO:' + sym.replace(/\.(?=[A-Z]$)/, '-');
     }
@@ -1667,10 +1696,13 @@ const DS = (() => {
     } catch { return []; }
   }
   function localSearch(q, limit = 30) {
-    const s = q.trim().toUpperCase(); if (!s) return [];
+    let s = q.trim().toUpperCase().replace(/\s+/g, ''); if (!s) return [];
     const out = [];
-    const hitSyms = [...bx.syms.values()].filter(v => v.id.startsWith(s) || v.base.startsWith(s))
-      .sort((a, b) => (b.id === s + 'USDT') - (a.id === s + 'USDT') || a.id.length - b.id.length).slice(0, 8);
+    const ko = Object.entries(KO).filter(([k]) => k.startsWith(s)).map(([, v]) => v.toUpperCase());
+    if (KO[s]) s = KO[s].toUpperCase();
+    const coin = v => v.base.replace(/^(1000000|1000|1M)(?=[A-Z])/, '');
+    const hitSyms = [...bx.syms.values()].filter(v => v.id.startsWith(s) || v.base.startsWith(s) || coin(v).startsWith(s) || (ko.length && ko.includes(coin(v))))
+      .sort((a, b) => (b.id === s + 'USDT' || coin(b) === s) - (a.id === s + 'USDT' || coin(a) === s) || a.id.length - b.id.length).slice(0, 8);
     for (const v of hitSyms) {
       out.push({ key: 'BINANCE:' + v.id, id: v.id, name: nameOf('BINANCE:' + v.id), exch: v.tradfi ? 'Binance TradFi' : 'Binance 선물 (무기한)' });
       if (!v.tradfi && !/^\d/.test(v.base)) {
@@ -1679,7 +1711,8 @@ const DS = (() => {
       }
     }
     for (const [code, n] of Object.entries(KR_NAMES)) if (n.toUpperCase().includes(s) || code.startsWith(s)) out.push({ key: null, id: code, name: n, exch: '한국', kr: code });
-    for (const [a, y] of Object.entries(ALIAS)) if (a.startsWith(s)) out.push({ key: 'YAHOO:' + y, id: a, name: IDX_NAME[y] || FUT[(y.match(/^(.*)=F$/) || [])[1]] || y, exch: '지수·선물' });
+    for (const [a, y] of Object.entries(ALIAS)) if (a.startsWith(s) || ko.includes(a)) if (!out.some(o => o.key === 'YAHOO:' + y)) out.push({ key: 'YAHOO:' + y, id: a, name: IDX_NAME[y] || FUT[(y.match(/^(.*)=F$/) || [])[1]] || y, exch: '지수·선물' });
+    for (const v of ko) { const k = resolveSync(v); if (k && !out.some(o => o.key === k)) out.push({ key: k, id: v, name: nameOf(k) || v, exch: sourceLabel(k) }); }
     return out.slice(0, limit);
   }
 
@@ -1940,8 +1973,13 @@ const CH = (() => {
     [1, '#9e9e9e'], [1.618, '#2962ff'], [2.618, '#e91e63']]);
   const FIBTIME = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
   // 도구: n = 찍는 점 수 (0 = 붓)
-  const TOOL_N = { trend: 2, ray: 2, ext: 2, arrow: 2, hline: 1, hray: 1, vline: 1, channel: 3, fib: 2, fibext: 3, fibchannel: 3, fibtime: 2,
-    pitchfork: 3, rect: 2, ellipse: 2, brush: 0, text: 1, measure: 2, daterange: 2, dpr: 2, long: 2, short: 2 };
+  // 도구: n = 찍는 점 수 (0 = 붓, -1 = 점을 계속 찍고 두 번 클릭·Enter로 끝)
+  const TOOL_N = { trend: 2, ray: 2, ext: 2, arrow: 2, hline: 1, hray: 1, vline: 1, cross: 1, channel: 3, angle: 2, info: 2, regression: 2, cycles: 2,
+    fib: 2, fibext: 3, fibchannel: 3, fibtime: 2, pitchfork: 3, rect: 2, ellipse: 2, triangle: 3, path: -1, brush: 0, text: 1, callout: 2, pricelabel: 1,
+    measure: 2, daterange: 2, dpr: 2, long: 2, short: 2, vwap: 1, elliott5: 6, elliott3: 4, abcd: 4, xabcd: 5, hs: 7 };
+  const POLY = { path: [], triangle: [], elliott5: ['0', '1', '2', '3', '4', '5'], elliott3: ['0', 'A', 'B', 'C'], abcd: ['A', 'B', 'C', 'D'],
+    xabcd: ['X', 'A', 'B', 'C', 'D'], hs: ['', 'LS', '', 'H', '', 'RS', ''] };
+  const TEXT_TYPES = new Set(['text', 'callout']);
   const FIB_TYPES = new Set(['fib', 'fibext', 'fibchannel']);
   let fibTemplate = JSON.parse(JSON.stringify(FIB_DEFAULT));
   const draw = { list: [], sel: null, creating: null, drag: null, hover: null, locked: false, hidden: false, brushing: false, pendingText: null };
@@ -2015,6 +2053,60 @@ const CH = (() => {
         g.handles = [A, [B[0], B[1]], [B[0], yS]]; break;
       }
       case 'brush': for (let i = 1; i < P.length; i++) g.segs.push([P[i - 1][0], P[i - 1][1], P[i][0], P[i][1]]); g.handles = []; break;
+      case 'cross': g.segs.push([0, A[1], W, A[1]], [A[0], 0, A[0], H]); break;
+      case 'angle': case 'info': g.segs.push([A[0], A[1], B[0], B[1]]); break;
+      case 'cycles': {
+        const L0 = logicalOf(d.p[0].t), L1 = logicalOf((d.p[1] || d.p[0]).t), step = L1 - L0; g.times = [];
+        if (Math.abs(step) >= 0.5) for (let k = 0; k < 400; k++) { const x = xOf(L0 + k * step); if (x == null) break; if (step > 0 ? x > W + 5 : x < -5) break; if (x >= -5 && x <= W + 5) g.times.push({ k, x }); }
+        for (const o of g.times) g.segs.push([o.x, 0, o.x, H]);
+        break;
+      }
+      case 'regression': {
+        const cl = i => Math.max(0, Math.min(D.N - 1, Math.round(logicalOf(d.p[i].t))));
+        const i0 = cl(0), i1 = cl(1), a = Math.min(i0, i1), b = Math.max(i0, i1), n = b - a + 1; if (n < 2) return null;
+        const lg = S.log && (d.pane || 'main') === 'main', Y = v => lg ? Math.log(v) : v, back = v => lg ? Math.exp(v) : v;
+        let sx = 0, sy = 0, sxx = 0, sxy = 0;
+        for (let i = a; i <= b; i++) { const x = i - a, y = Y(D.C[i]); sx += x; sy += y; sxx += x * x; sxy += x * y; }
+        const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx || 1), icpt = (sy - slope * sx) / n;
+        let ss = 0, st = 0; const my = sy / n;
+        for (let i = a; i <= b; i++) { const y = Y(D.C[i]), r = y - (icpt + slope * (i - a)); ss += r * r; st += (y - my) * (y - my); }
+        const sd = Math.sqrt(ss / n), dev = d.style.dev ?? 2, xa = xOf(a), xb = xOf(b); if (xa == null || xb == null) return null;
+        const yy = (v) => yIn(ser, back(v)), e = icpt + slope * (n - 1);
+        g.reg = { xa, xb, c: [yy(icpt), yy(e)], u: [yy(icpt + dev * sd), yy(e + dev * sd)], l: [yy(icpt - dev * sd), yy(e - dev * sd)], r2: st ? 1 - ss / st : 0, up: slope >= 0, n };
+        if (g.reg.c.some(v => v == null) || g.reg.u.some(v => v == null) || g.reg.l.some(v => v == null)) return null;
+        g.segs.push([xa, g.reg.c[0], xb, g.reg.c[1]], [xa, g.reg.u[0], xb, g.reg.u[1]], [xa, g.reg.l[0], xb, g.reg.l[1]]);
+        g.handles = [[xa, g.reg.c[0]], [xb, g.reg.c[1]]];
+        break;
+      }
+      case 'vwap': {
+        const i0 = Math.max(0, Math.min(D.N - 1, Math.round(logicalOf(d.p[0].t)))), x0 = xOf(i0), x1 = xOf(i0 + 1); if (x0 == null || x1 == null) return null;
+        const sp = x1 - x0; let pv = 0, vv = 0; const pts = [];
+        for (let i = i0; i < D.N; i++) {
+          const tp = (D.H[i] + D.L[i] + D.C[i]) / 3, v = D.V[i] || 0; pv += tp * v; vv += v;
+          const x = x0 + (i - i0) * sp; if (x < -sp || x > W + sp) continue;
+          const y = yIn(ser, vv ? pv / vv : tp); if (y != null) pts.push([x, y]);
+        }
+        for (let i = 1; i < pts.length; i++) g.segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]]);
+        g.poly = pts; g.handles = [[x0, yIn(ser, (D.H[i0] + D.L[i0] + D.C[i0]) / 3) ?? A[1]]];
+        break;
+      }
+      case 'pricelabel': {
+        const txt = fp(d.p[0].p); let w = 60; try { const c = document.createElement('canvas').getContext('2d'); c.font = '600 12px ' + css('--f-mono'); w = c.measureText(txt).width; } catch {}
+        g.lab = { txt, box: [A[0] + 10, A[1] - 24, A[0] + 10 + w + 14, A[1] - 2] }; g.boxes.push(g.lab.box); break;
+      }
+      case 'callout': {
+        const lines = String(d.text || '텍스트').split('\n'), fs = d.style.size || 13; let w = 40;
+        try { const c = document.createElement('canvas').getContext('2d'); c.font = `600 ${fs}px ` + css('--f-body'); w = Math.max(...lines.map(l => c.measureText(l).width)); } catch {}
+        const h = lines.length * (fs + 4), bx = [B[0] - w / 2 - 8, B[1] - h / 2 - 6, B[0] + w / 2 + 8, B[1] + h / 2 + 6];
+        g.boxes.push(bx); g.segs.push([A[0], A[1], B[0], B[1]]); g.lines = lines; g.fs = fs; break;
+      }
+      case 'path': case 'triangle': case 'elliott5': case 'elliott3': case 'abcd': case 'xabcd': case 'hs': {
+        for (let i = 1; i < P.length; i++) g.segs.push([P[i - 1][0], P[i - 1][1], P[i][0], P[i][1]]);
+        if (d.type === 'triangle' && P.length === 3) g.segs.push([P[2][0], P[2][1], P[0][0], P[0][1]]);
+        if (d.type === 'xabcd') { g.dash = []; if (P[2]) g.dash.push([P[0], P[2]]); if (P[4]) g.dash.push([P[2], P[4]]); for (const [a, b] of g.dash) g.segs.push([a[0], a[1], b[0], b[1]]); }
+        if (d.type === 'hs' && P[4]) { const f = farPt(P[2], P[4], 0.6), r = farPt(P[4], P[2], 0.6); g.neck = [r[0], r[1], f[0], f[1]]; g.segs.push(g.neck); }
+        break;
+      }
       case 'text': {
         let w = 60; try { const c = document.createElement('canvas').getContext('2d'); c.font = `600 ${d.style.size || 14}px sans-serif`; w = c.measureText(d.text || '텍스트').width; } catch {}
         g.boxes.push([A[0] - 4, A[1] - 12, A[0] + w + 4, A[1] + 12]); break;
@@ -2119,6 +2211,73 @@ const CH = (() => {
         label(ctx, parts.join(' · '), mx, up || d.type === 'daterange' ? y0 - 14 : y1 + 14, c2);
         break;
       }
+      case 'cross': g.segs.forEach(line); label(ctx, pfx(d.p[0].p), sz.width, P[0][1], col, '#fff', 'right'); break;
+      case 'angle': case 'info': {
+        line(g.segs[0]); const Bq = P[1] || P[0], ang = Math.atan2(P[0][1] - Bq[1], Bq[0] - P[0][0]) * 180 / Math.PI;
+        ctx.save(); ctx.setLineDash([3, 3]); ctx.globalAlpha = 0.6; line([P[0][0], P[0][1], P[0][0] + 40, P[0][1]]); ctx.restore();
+        ctx.beginPath(); ctx.arc(P[0][0], P[0][1], 24, 0, -ang * Math.PI / 180, ang > 0); ctx.stroke();
+        if (d.type === 'angle') label(ctx, `${ang.toFixed(1)}°`, Bq[0] + 14, Bq[1], col, '#fff', 'left');
+        else {
+          const q0 = d.p[0], q1 = d.p[1] || d.p[0], dp = q1.p - q0.p, pct = (q1.p / q0.p - 1) * 100, bars = Math.round(logicalOf(q1.t) - logicalOf(q0.t));
+          label(ctx, `${dp >= 0 ? '+' : ''}${pfx(dp)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%) · ${Math.abs(bars)}봉 · ${dur(q1.t - q0.t)} · ${ang.toFixed(1)}°`, (P[0][0] + Bq[0]) / 2, Math.min(P[0][1], Bq[1]) - 14, col);
+        }
+        break;
+      }
+      case 'cycles': ctx.font = '11px ' + css('--f-mono'); ctx.textAlign = 'left'; ctx.textBaseline = 'top'; for (const o of g.times) { line([o.x, 0, o.x, sz.height]); ctx.fillText(String(o.k), o.x + 3, 4); } break;
+      case 'regression': {
+        const R = g.reg; ctx.save(); ctx.fillStyle = alpha(col, 0.08); ctx.beginPath(); ctx.moveTo(R.xa, R.u[0]); ctx.lineTo(R.xb, R.u[1]); ctx.lineTo(R.xb, R.l[1]); ctx.lineTo(R.xa, R.l[0]); ctx.closePath(); ctx.fill(); ctx.restore();
+        line(g.segs[0]); ctx.save(); ctx.setLineDash([4, 3]); line(g.segs[1]); line(g.segs[2]); ctx.restore();
+        label(ctx, `회귀 ${R.n}봉 · R² ${R.r2.toFixed(2)} · ±${d.style.dev ?? 2}σ`, R.xb, R.c[1] + (R.up ? -14 : 14), col, '#fff', 'right');
+        break;
+      }
+      case 'vwap': {
+        ctx.beginPath(); g.poly.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+        if (g.handles[0]) { ctx.beginPath(); ctx.arc(g.handles[0][0], g.handles[0][1], 4, 0, Math.PI * 2); ctx.fill(); }
+        const last = g.poly[g.poly.length - 1]; if (last) label(ctx, 'VWAP ' + pfx(ser.coordinateToPrice(last[1]) ?? 0), last[0], last[1] - 12, col, '#fff', 'right');
+        break;
+      }
+      case 'pricelabel': {
+        const [x0, y0, x1, y1] = g.lab.box; ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); ctx.lineTo(x0 + 2, y1); ctx.lineTo(x0 + 12, y1); ctx.closePath(); ctx.fill();
+        ctx.fillRect(x0, y0, x1 - x0, y1 - y0); ctx.fillStyle = '#fff'; ctx.font = '600 12px ' + css('--f-mono'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g.lab.txt, (x0 + x1) / 2, (y0 + y1) / 2);
+        break;
+      }
+      case 'callout': {
+        const [x0, y0, x1, y1] = g.boxes[0], Bq = P[1] || P[0];
+        // 앵커 → 상자 가장자리까지 선
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, dx = P[0][0] - cx, dy = P[0][1] - cy, k = Math.max(Math.abs(dx) / ((x1 - x0) / 2), Math.abs(dy) / ((y1 - y0) / 2), 1e-9);
+        ctx.setLineDash([]); line([P[0][0], P[0][1], cx + dx / k, cy + dy / k]);
+        ctx.beginPath(); ctx.arc(P[0][0], P[0][1], 3, 0, Math.PI * 2); ctx.fill();
+        ctx.save(); ctx.fillStyle = alpha(col, 0.9); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, y0, x1 - x0, y1 - y0, 6) : ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.fill(); ctx.restore();
+        ctx.fillStyle = '#fff'; ctx.font = `600 ${g.fs}px ` + css('--f-body'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        g.lines.forEach((t, i) => ctx.fillText(t, Bq[0], y0 + 6 + (i + 0.5) * (g.fs + 4)));
+        break;
+      }
+      case 'path': case 'triangle': case 'elliott5': case 'elliott3': case 'abcd': case 'xabcd': case 'hs': {
+        if (d.type === 'triangle' && P.length === 3) { ctx.save(); ctx.fillStyle = alpha(col, 0.12); ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); ctx.lineTo(P[1][0], P[1][1]); ctx.lineTo(P[2][0], P[2][1]); ctx.closePath(); ctx.fill(); ctx.restore(); }
+        ctx.lineJoin = 'round'; ctx.beginPath(); P.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); if (d.type === 'triangle' && P.length === 3) ctx.closePath(); ctx.stroke();
+        if (d.type === 'path' && P.length > 1) arrowHead(ctx, P[P.length - 2], P[P.length - 1], 9);
+        if (g.dash) { ctx.save(); ctx.setLineDash([5, 4]); ctx.globalAlpha = 0.7; for (const [a, b] of g.dash) line([a[0], a[1], b[0], b[1]]); ctx.restore(); }
+        if (g.neck) { ctx.save(); ctx.setLineDash([5, 4]); line(g.neck); ctx.restore(); }
+        const names = POLY[d.type] || [];
+        ctx.font = '600 11px ' + css('--f-body'); ctx.textAlign = 'center'; ctx.setLineDash([]);
+        P.forEach((p, i) => {
+          const nm = names[i]; if (!nm) return;
+          const up = (i === 0 || p[1] <= P[i - 1][1]) && (i === P.length - 1 || p[1] <= P[i + 1][1]);   // 꼭짓점이 위면 글자도 위
+          const y = p[1] + (up ? -10 : 12); ctx.beginPath(); ctx.arc(p[0], y, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(nm, p[0], y + 0.5); ctx.fillStyle = col;
+        });
+        // 하모닉: 다리 비율 (BC/AB 같은 되돌림 비율)
+        if (d.type === 'abcd' || d.type === 'xabcd') for (let i = 2; i < d.p.length; i++) {
+          const a = Math.abs(d.p[i - 1].p - d.p[i - 2].p), b = Math.abs(d.p[i].p - d.p[i - 1].p); if (!a) continue;
+          label(ctx, (b / a).toFixed(3), (P[i][0] + P[i - 1][0]) / 2, (P[i][1] + P[i - 1][1]) / 2, alpha(col, 0.85));
+        }
+        if (d.type === 'elliott5' || d.type === 'elliott3') for (let i = 2; i < d.p.length; i++) {
+          const a = Math.abs(d.p[i - 1].p - d.p[i - 2].p), b = Math.abs(d.p[i].p - d.p[i - 1].p); if (!a) continue;
+          ctx.save(); ctx.font = '10px ' + css('--f-mono'); ctx.fillStyle = css('--muted'); ctx.textAlign = 'center'; ctx.fillText((b / a).toFixed(2), (P[i][0] + P[i - 1][0]) / 2 + 12, (P[i][1] + P[i - 1][1]) / 2 - 6); ctx.restore();
+        }
+        break;
+      }
       case 'long': case 'short': {
         const xa = Math.min(P[0][0], P[1][0]), xb = Math.max(P[0][0], P[1][0]), ye = P[0][1], yt = P[1][1], ys = g.yS;
         const entry = d.p[0].p, target = d.p[1].p, stop = g.stop;
@@ -2189,6 +2348,7 @@ const CH = (() => {
   function setTool(t) {
     S.tool = t; draw.creating = null; draw.sel = null; drawPrim.update();
     box && (box.style.cursor = t === 'cursor' ? '' : 'crosshair');
+    legend && legend.classList.toggle('through', t !== 'cursor');   // 그리는 동안은 범례 위에서도 그려짐 (트레이딩뷰처럼)
     onChange('tool');
   }
   function newDrawing(type, pt, pane) {
@@ -2200,6 +2360,10 @@ const CH = (() => {
     if (['measure', 'daterange', 'dpr', 'long', 'short'].includes(type)) base.style.w = 1;
     if (type === 'pitchfork') base.style.color = '#089981';
     if (type === 'text') { base.style.color = css('--fg'); base.style.size = 14; base.text = ''; }
+    if (type === 'callout') { base.style.size = 14; base.text = ''; }
+    if (type === 'regression') base.style.dev = 2;
+    if (type === 'vwap') base.style.color = '#ff9800';
+    if (type === 'path' || type === 'triangle' || POLY[type]) base.style.w = 2;
     return base;
   }
   function relXY(e) { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
@@ -2234,8 +2398,9 @@ const CH = (() => {
   function finish(d) {
     draw.creating = null; draw.brushing = false;
     if (d.type === 'long' || d.type === 'short') d.p[2] = { t: d.p[1].t, p: d.p[0].p - (d.p[1].p - d.p[0].p) };
+    if (d.type === 'callout') draw.pendingText = d;
     draw.list.push(d); draw.sel = d; saveDrawings();
-    S.tool = 'cursor'; box.style.cursor = ''; drawPrim.update(); onChange('tool');
+    S.tool = 'cursor'; box.style.cursor = ''; legend && legend.classList.remove('through'); drawPrim.update(); onChange('tool');
   }
   function bindPointer() {
     box.addEventListener('pointerdown', e => {
@@ -2295,22 +2460,25 @@ const CH = (() => {
     function advance(x, y) {
       const d = draw.creating, n = TOOL_N[d.type] ?? 2, pt = pointAt(x, y - paneTop(d.pane), d.pane);
       if (pt) d.p[d.p.length - 1] = pt;
-      if (d.p.length < n) d.p.push({ ...d.p[d.p.length - 1] }); else { freezeChart(false); finish(d); }
+      if (n === -1 || d.p.length < n) d.p.push({ ...d.p[d.p.length - 1] }); else { freezeChart(false); finish(d); }
       drawPrim.update();
     }
     const end = (ev) => {
-      // 텍스트는 클릭이 끝난 뒤 입력 창을 띄움 (바로 띄우면 같은 클릭이 창 바깥 클릭으로 처리돼 닫힘)
-      if (draw.pendingText) { const t = draw.pendingText; draw.pendingText = null; setTimeout(() => UI.drawingDialog(t), 0); }
       if (draw.creating && !draw.brushing && draw.down && ev && ev.type === 'pointerup') {
         const [x, y] = relXY(ev), far = Math.hypot(x - draw.down[0], y - draw.down[1]) > 8; draw.down = null;
         if (far) advance(x, y);
       } else if (draw.creating && draw.down && !draw.brushing) draw.down = null;
       if (draw.brushing && draw.creating) { const d = draw.creating; freezeChart(false); if (d.p.length > 1) finish(d); else { draw.creating = null; draw.brushing = false; drawPrim.update(); } }
       if (draw.drag) { const moved = draw.drag.moved; draw.drag = null; freezeChart(false); if (moved) saveDrawings(); }
+      // 텍스트·말풍선은 클릭이 끝난 뒤 입력 창을 띄움 (바로 띄우면 같은 클릭이 창 바깥 클릭으로 처리돼 닫힘)
+      if (draw.pendingText) { const t = draw.pendingText; draw.pendingText = null; setTimeout(() => UI.drawingDialog(t), 0); }
     };
     box.addEventListener('pointerup', end, true);
     box.addEventListener('pointercancel', end, true);
-    box.addEventListener('dblclick', e => { const [x, y] = relXY(e), pa = paneAt(x, y); const h = pa && pa.key ? hit(pa.key, x, pa.y, pa.W, pa.H) : null; if (h) { e.stopPropagation(); draw.sel = h.d; UI.drawingDialog(h.d); } }, true);
+    box.addEventListener('dblclick', e => {
+      if (draw.creating && TOOL_N[draw.creating.type] === -1) { e.stopPropagation(); e.preventDefault(); finishCreate(); return; }
+      const [x, y] = relXY(e), pa = paneAt(x, y); const h = pa && pa.key ? hit(pa.key, x, pa.y, pa.W, pa.H) : null; if (h) { e.stopPropagation(); draw.sel = h.d; UI.drawingDialog(h.d); }
+    }, true);
     // 오른쪽 클릭: 그림 · 가격 축 · 지표 패널 · 차트 메뉴
     box.addEventListener('contextmenu', e => {
       if (!chart) return;
@@ -2325,6 +2493,15 @@ const CH = (() => {
     }, true);
   }
   function addDrawing(type, pt, pane = 'main') { const d = newDrawing(type, pt, pane); finish(d); return d; }
+  // 점을 계속 찍는 도구(경로) 끝내기: 두 번 클릭 · Enter
+  function finishCreate() {
+    const d = draw.creating; if (!d) return false;
+    if (TOOL_N[d.type] === -1) {
+      d.p.pop(); while (d.p.length > 1 && d.p.at(-1).t === d.p.at(-2).t && d.p.at(-1).p === d.p.at(-2).p) d.p.pop();
+      if (d.p.length >= 2) { freezeChart(false); finish(d); } else cancelCreate();
+    } else cancelCreate();
+    return true;
+  }
   function duplicate(d) {
     const c = JSON.parse(JSON.stringify({ ...d, id: undefined })); c.id = Math.random().toString(36).slice(2, 9);
     const dt = (DS.TF_SEC[S.tf] || 86400) * 5; c.p = c.p.map(q => ({ t: q.t + dt, p: q.p }));
@@ -2982,7 +3159,7 @@ const CH = (() => {
   function goLatest() { chart && chart.timeScale().scrollToRealTime(); }
   function fit() { chart && chart.timeScale().fitContent(); }
 
-  return { init, load, render, undo, redo, addDrawing, duplicate, TOOL_N, toggleIndicator, removeIndicator, autoScale, selectDrawing, FIBEXT_LEVELS, FIBCH_LEVELS, setLog, setScale, setConfig, setRange, setLocked, setHidden, CFG_DEFAULT, get cfg() { return cfg; }, setMagnet, setTool, deleteSelected, clearDrawings, cancelCreate, addIndicator, updateIndicator, resetLayout,
+  return { init, load, render, undo, redo, addDrawing, duplicate, finishCreate, POLY, TOOL_N, toggleIndicator, removeIndicator, autoScale, selectDrawing, FIBEXT_LEVELS, FIBCH_LEVELS, setLog, setScale, setConfig, setRange, setLocked, setHidden, CFG_DEFAULT, get cfg() { return cfg; }, setMagnet, setTool, deleteSelected, clearDrawings, cancelCreate, addIndicator, updateIndicator, resetLayout,
     rethemed, screenshot, redraw, saveDrawings, saveFibTemplate, goLatest, fit, TYPES, FIB_DEFAULT,
     get state() { return S; }, get layout() { return layout; }, get drawings() { return draw; }, get chart() { return chart; }, get data() { return D; },
     get fibTemplate() { return fibTemplate; }, refreshScanZones() { for (const h of handles) if (h.inst?.type === 'zones' && h.fill) h.fill(); refreshLegend(); } };
@@ -3076,33 +3253,46 @@ const UI = (() => {
   // ---------------- 심볼 검색 ----------------
   function openSearch({ mode = 'open', initial = '' } = {}) {
     const d = openDlg(`<div class="in"><header>${mode === 'add' ? '관심목록에 심볼 추가' : '심볼 검색'}<button class="ib" data-x>✕</button></header>
-      <div class="body"><input id="sq" placeholder="BTC · SI1! · AAPL · 005930 · 삼성전자 · NASDAQ:TSLA" autocomplete="off" spellcheck="false">
+      <div class="body"><input id="sq" placeholder="BTC · 비트코인 · XAUUSD · SI1! · AAPL · 삼성전자 · NASDAQ:TSLA" autocomplete="off" spellcheck="false">
+      <div class="srf" id="srf">${[['all', '전체'], ['perp', '크립토 선물'], ['spot', '현물'], ['crypto', '달러 · 장기'], ['stock', '주식 · ETF'], ['cmd', '원자재 · 지수'], ['kr', '한국']].map(([k, n]) => `<button data-f="${k}"${k === 'all' ? ' class="on"' : ''}>${n}</button>`).join('')}</div>
       <div class="sr-list" id="srl"></div>
       <div class="dim" style="font-size:11.5px">SI1! 은, GC1! 금, CL1! 원유, NQ1! 나스닥 선물 · SPX, KOSPI, DXY · 6자리 숫자는 한국 주식. 미국·한국 주식과 선물은 PC 서버가 켜져 있어야 열립니다.</div></div></div>`);
     const inp = d.querySelector('#sq'), list = d.querySelector('#srl');
-    let items = [], act = 0, seq = 0, tmr = null;
+    let all = [], items = [], act = 0, seq = 0, tmr = null, filt = 'all';
     const inList = k => k && curList().items.includes(k);
+    // 트레이딩뷰처럼 종류별 거르기
+    const kindOf = x => {
+      const k = x.key || '';
+      if (!k) return 'kr';
+      if (k.startsWith('BINANCESPOT:')) return 'spot';
+      if (k.startsWith('CRYPTO:')) return 'crypto';
+      if (k.startsWith('BINANCE:')) { const v = DS.bx.syms.get(k.slice(8)); if (!v || !v.tradfi) return 'perp'; return v.utype === 'COMMODITY' || v.utype === 'FX' ? 'cmd' : v.utype === 'KR_EQUITY' ? 'kr' : 'stock'; }
+      const id = k.slice(6);
+      return /\.K[SQ]$/.test(id) ? 'kr' : /=F$|^\^|=X$|\.NYB$/.test(id) ? 'cmd' : 'stock';
+    };
     const paint = () => {
+      items = filt === 'all' ? all : all.filter(x => kindOf(x) === filt); if (act >= items.length) act = 0;
       list.innerHTML = items.length ? items.map((x, i) => `<div class="sr${i === act ? ' act' : ''}" data-i="${i}"><b>${esc(x.label)}</b><span>${esc(x.name || '')}</span><em>${esc(x.exch || '')}</em>
         <button class="addst${inList(x.key) ? ' on' : ''}" data-add="${i}" title="관심목록에 추가">${inList(x.key) ? '★' : '☆'}</button></div>`).join('')
-        : `<div class="empty">${inp.value ? '찾는 중…' : '종목 코드나 이름을 입력하세요'}</div>`;
+        : `<div class="empty">${inp.value ? (all.length ? '이 종류에는 없음' : '찾는 중…') : '종목 코드나 이름을 입력하세요'}</div>`;
       list.querySelector('.sr.act')?.scrollIntoView({ block: 'nearest' });
     };
+    d.querySelector('#srf').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; filt = b.dataset.f; d.querySelectorAll('#srf button').forEach(x => x.classList.toggle('on', x === b)); act = 0; paint(); inp.focus(); };
     const update = () => {
       const q = inp.value.trim(), my = ++seq;
-      items = []; act = 0;
+      all = []; act = 0;
       const direct = q ? DS.resolveSync(q) : null;
       if (direct) {
         const alt = DS.liveAlt(direct);
-        if (alt) items.push({ key: alt.key, label: DS.label(alt.key), name: DS.nameOf(direct) || DS.nameOf(alt.key), exch: '⚡ 실시간 · 바이낸스' + (ALT_NOTE[alt.kind] ? ' · ' + ALT_NOTE[alt.kind] : '') });
-        items.push({ key: direct, label: DS.label(direct), name: DS.nameOf(direct) || '바로 열기', exch: DS.sourceLabel(direct) + (direct.startsWith('YAHOO:') ? ' · 지연 · 긴 과거 (PC 서버)' : '') });
+        if (alt) all.push({ key: alt.key, label: DS.label(alt.key), name: DS.nameOf(direct) || DS.nameOf(alt.key), exch: '⚡ 실시간 · 바이낸스' + (ALT_NOTE[alt.kind] ? ' · ' + ALT_NOTE[alt.kind] : '') });
+        all.push({ key: direct, label: DS.label(direct), name: DS.nameOf(direct) || '바로 열기', exch: DS.sourceLabel(direct) + (direct.startsWith('YAHOO:') ? (DS.srv.ok ? ' · 지연 · 긴 과거' : ' · PC 서버 필요') : '') });
       }
-      for (const x of DS.localSearch(q)) if (!items.some(y => y.key && y.key === x.key)) items.push({ ...x, label: x.key ? DS.label(x.key) : x.id });
+      for (const x of DS.localSearch(q)) if (!all.some(y => y.key && y.key === x.key)) all.push({ ...x, label: x.key ? DS.label(x.key) : x.id });
       paint();
       clearTimeout(tmr);
       if (q.length >= 1 && DS.srv.ok !== false) tmr = setTimeout(async () => {
         const r = await DS.search(q); if (my !== seq) return;
-        for (const x of r) if (!items.some(y => y.key === x.key)) items.push({ ...x, label: DS.label(x.key), exch: x.exch + (x.type ? ' · ' + x.type : '') });
+        for (const x of r) if (!all.some(y => y.key === x.key)) all.push({ ...x, label: DS.label(x.key), exch: x.exch + (x.type ? ' · ' + x.type : '') });
         paint();
       }, 280);
     };
@@ -3424,9 +3614,10 @@ const UI = (() => {
     const num = (id, label, v) => `<label>${label}<input type="number" step="any" id="${id}" value="${v}"></label>`;
     const coord = dw.type === 'hline' || dw.type === 'hray' ? `<div class="grid2">${num('gP0', '가격', +dw.p[0].p.toPrecision(10))}</div>`
       : pos ? `<div class="grid2">${num('gP0', '진입가', +dw.p[0].p.toPrecision(10))}${num('gP1', '목표가', +dw.p[1].p.toPrecision(10))}${num('gP2', '손절가', +(dw.p[2] ? dw.p[2].p : dw.p[0].p - (dw.p[1].p - dw.p[0].p)).toPrecision(10))}</div>` : '';
-    const styleRow = dw.type === 'text' ? `<label>글자<textarea id="gTxt" rows="2">${esc(dw.text || '')}</textarea></label><div class="grid2"><label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label><label>글자 크기<input type="number" id="gSize" min="9" max="48" value="${dw.style.size || 14}"></label></div>`
+    const isTxt = dw.type === 'text' || dw.type === 'callout';
+    const styleRow = isTxt ? `<label>글자<textarea id="gTxt" rows="2">${esc(dw.text || '')}</textarea></label><div class="grid2"><label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label><label>글자 크기<input type="number" id="gSize" min="9" max="48" value="${dw.style.size || 14}"></label></div>`
       : `<div class="grid2">${pos ? '' : `<label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label>`}<label>두께<input type="number" id="gW" min="1" max="5" value="${dw.style.w}"></label>
-        <label class="chk"><input type="checkbox" id="gDash"${dw.style.dash ? ' checked' : ''}>점선</label></div>`;
+        <label class="chk"><input type="checkbox" id="gDash"${dw.style.dash ? ' checked' : ''}>점선</label>${dw.type === 'regression' ? `<label>편차 (σ 배수)<input type="number" id="gDev" min="0.5" max="5" step="0.5" value="${dw.style.dev ?? 2}"></label>` : ''}</div>`;
     const fibBox = isFib ? `
         <div class="grid2">${dw.type !== 'fibchannel' ? `<label class="chk"><input type="checkbox" id="gLog"${F.log ? ' checked' : ''}>로그 스케일 기준 레벨</label>` : ''}${dw.type === 'fib' ? `<label class="chk"><input type="checkbox" id="gRev"${F.reverse ? ' checked' : ''}>반전 (0과 1 바꾸기)</label>` : ''}
         <label class="chk"><input type="checkbox" id="gExt"${F.extend ? ' checked' : ''}>${dw.type === 'fibchannel' ? '양쪽으로 연장' : '오른쪽으로 연장'}</label><label class="chk"><input type="checkbox" id="gLbl"${F.labels ? ' checked' : ''}>레벨 글자</label>
@@ -3443,7 +3634,7 @@ const UI = (() => {
       for (const [id, k] of [['gLog', 'log'], ['gRev', 'reverse'], ['gExt', 'extend'], ['gLbl', 'labels'], ['gPx', 'prices']]) { const v = chk(id); if (v !== undefined) o[k] = v; }
       return o;
     };
-    if (dw.type === 'text') setTimeout(() => d.querySelector('#gTxt')?.focus(), 30);
+    if (isTxt) setTimeout(() => d.querySelector('#gTxt')?.focus(), 30);
     if (isFib) {
       d.querySelector('#lvAdd').onclick = () => { F.levels = collect().levels; F.levels.push({ r: (F.levels.at(-1)?.r || 1) + 0.5, color: '#90caf9', on: true }); d.querySelector('#lvBoxD').innerHTML = lvRows(); };
       d.querySelector('#lvBoxD').onclick = e => { const b = e.target.closest('[data-del]'); if (!b) return; F.levels = collect().levels; F.levels.splice(+b.dataset.del, 1); d.querySelector('#lvBoxD').innerHTML = lvRows(); };
@@ -3455,8 +3646,8 @@ const UI = (() => {
       d.onclose = null;
       if (d.returnValue !== 'ok') { CH.redraw(); return; } d.returnValue = '';
       if (isFib) dw.fib = collect();
-      else if (dw.type === 'text') { dw.text = d.querySelector('#gTxt').value; dw.style = { ...dw.style, color: d.querySelector('#gCol').value, size: +d.querySelector('#gSize').value || 14 }; if (!dw.text.trim()) { CH.selectDrawing(dw); CH.deleteSelected(); return; } }
-      else dw.style = { ...dw.style, ...(d.querySelector('#gCol') ? { color: d.querySelector('#gCol').value } : {}), w: +d.querySelector('#gW').value || 1, dash: d.querySelector('#gDash').checked };
+      else if (isTxt) { dw.text = d.querySelector('#gTxt').value; dw.style = { ...dw.style, color: d.querySelector('#gCol').value, size: +d.querySelector('#gSize').value || 14 }; if (!dw.text.trim()) { CH.selectDrawing(dw); CH.deleteSelected(); return; } }
+      else dw.style = { ...dw.style, ...(d.querySelector('#gCol') ? { color: d.querySelector('#gCol').value } : {}), w: +d.querySelector('#gW').value || 1, dash: d.querySelector('#gDash').checked, ...(d.querySelector('#gDev') ? { dev: +d.querySelector('#gDev').value || 2 } : {}) };
       const v = id => { const el = d.querySelector('#' + id); return el && el.value !== '' && isFinite(+el.value) ? +el.value : null; };
       if (v('gP0') != null) dw.p[0].p = v('gP0');
       if (pos && v('gP1') != null) dw.p[1].p = v('gP1');
@@ -3549,21 +3740,42 @@ const UI = (() => {
     measure: SV('<path d="M9 2v14M5 5l4-3 4 3M5 13l4 3 4-3"/>'),
     daterange: SV('<path d="M2 3v12M16 3v12M3 9h12M6 6L3 9l3 3M12 6l3 3-3 3"/>'),
     dpr: SV('<rect x="2" y="3" width="14" height="12" stroke-dasharray="2 1.5"/><path d="M9 5v8M4 9h10"/>'),
+    cross: SV('<path d="M1 9h16M9 1v16"/>' + DOT(9, 9)),
+    angle: SV('<path d="M3 15L15 4M3 15h12"/><path d="M9 15a6 6 0 0 0-2-4.5" stroke-dasharray="1.5 1.5"/>'),
+    info: SV('<path d="M3 15L15 3"/>' + DOT(3, 15) + DOT(15, 3) + '<rect x="9" y="9" width="7" height="5" rx="1" fill="currentColor" stroke="none"/>'),
+    regression: SV('<path d="M2 13L16 5"/><path d="M2 9L16 1M2 17L16 9" stroke-dasharray="2 2"/>'),
+    cycles: SV('<path d="M3 2v14M8 2v14M13 2v14" stroke-dasharray="3 2"/><path d="M3 9c1.7-4 3.3-4 5 0s3.3 4 5 0"/>'),
+    triangle: SV('<path d="M9 3l7 12H2z"/>'),
+    path: SV('<path d="M2 14l4-8 4 5 5-8" stroke-linejoin="round"/><path d="M11 3h4v4" />'),
+    callout: SV('<path d="M3 3h12v8H8l-3 3v-3H3z" stroke-linejoin="round"/>'),
+    pricelabel: SV('<path d="M2 10l5 5h9V5H7z" stroke-linejoin="round"/>' + DOT(8, 10)),
+    vwap: SV('<path d="M2 12c3 0 3-6 6-6s3 7 6 7"/>' + DOT(2, 12) + '<path d="M11 3h5M12 6h4" stroke-width="1"/>'),
+    elliott5: SV('<path d="M1 15l3-7 2 4 4-9 2 5 4-6" stroke-linejoin="round"/><text x="10" y="16" font-size="6" fill="currentColor" stroke="none" font-weight="700">5</text>'),
+    elliott3: SV('<path d="M2 4l5 9 3-5 5 7" stroke-linejoin="round"/><text x="11" y="7" font-size="6" fill="currentColor" stroke="none" font-weight="700">ABC</text>'),
+    abcd: SV('<path d="M2 15l4-11 4 8 5-10" stroke-linejoin="round"/><text x="1" y="7" font-size="5.5" fill="currentColor" stroke="none" font-weight="700">AB</text>'),
+    xabcd: SV('<path d="M1 14l3-10 3 8 3-6 3 5 3-9" stroke-linejoin="round"/><path d="M4 4l6 2M7 12l6 0" stroke-dasharray="1.5 1.5" stroke-width="0.9"/>'),
+    hs: SV('<path d="M1 14l2-5 2 3 2-9 2 9 2-3 2 5" stroke-linejoin="round"/><path d="M1 11h16" stroke-dasharray="2 2" stroke-width="0.9"/>'),
   };
   const TOOL_DEF = {
-    cursor: ['커서', 'Esc'], trend: ['추세선', 'Alt+T'], ray: ['레이'], ext: ['연장선'], arrow: ['화살표'], hline: ['수평선', 'Alt+H'], hray: ['수평 레이'], vline: ['수직선', 'Alt+V'], channel: ['평행 채널'],
+    cursor: ['커서', 'Esc'], trend: ['추세선', 'Alt+T'], ray: ['레이'], info: ['인포 라인'], ext: ['연장선'], angle: ['추세 각도'], hline: ['수평선', 'Alt+H'], hray: ['수평 레이', 'Alt+J'],
+    vline: ['수직선', 'Alt+V'], cross: ['십자선', 'Alt+C'], arrow: ['화살표'], channel: ['평행 채널'], regression: ['회귀 추세'], cycles: ['사이클 라인'],
     fib: ['피보나치 되돌림 (로그)', 'Alt+F'], fibext: ['추세 기반 피보 확장'], fibchannel: ['피보나치 채널'], fibtime: ['피보나치 타임존'], pitchfork: ['피치포크'],
-    rect: ['사각형'], ellipse: ['원 · 타원'], brush: ['붓 (자유 그리기)'], text: ['텍스트'],
-    long: ['롱 포지션'], short: ['숏 포지션'], measure: ['가격 범위', 'Alt+M'], daterange: ['날짜 범위'], dpr: ['날짜 · 가격 범위'],
+    xabcd: ['XABCD 패턴'], abcd: ['ABCD 패턴'], hs: ['헤드 앤 숄더'], elliott5: ['엘리엇 임펄스 (12345)'], elliott3: ['엘리엇 조정 (ABC)'],
+    long: ['롱 포지션'], short: ['숏 포지션'], measure: ['가격 범위', 'Alt+M'], daterange: ['날짜 범위'], dpr: ['날짜 · 가격 범위'], vwap: ['앵커드 VWAP'],
+    rect: ['사각형'], ellipse: ['원 · 타원'], triangle: ['삼각형'], path: ['경로 (꺾은선)'], brush: ['붓 (자유 그리기)'],
+    text: ['텍스트'], callout: ['말풍선'], pricelabel: ['가격 라벨'],
   };
   const TOOL_HOW = { channel: '점 3개: 선의 두 끝 → 채널 폭', fibext: '점 3개: 추세 시작 → 끝 → 되돌림', fibchannel: '점 3개: 기준선 두 끝 → 채널 폭', pitchfork: '점 3개: 손잡이 → 두 갈래',
-    long: '진입가 → 목표가 (손절은 반대 같은 폭, 끌어서 조정)', short: '진입가 → 목표가 (손절은 반대 같은 폭)', brush: '누른 채 끌기' };
+    long: '진입가 → 목표가 (손절은 반대 같은 폭, 끌어서 조정)', short: '진입가 → 목표가 (손절은 반대 같은 폭)', brush: '누른 채 끌기', path: '점을 계속 찍고 두 번 클릭 또는 Enter로 끝',
+    regression: '구간 두 점: 종가 회귀선 ± 2σ 채널', vwap: '기준 봉 하나: 그 봉부터 거래량 가중 평균가', cycles: '두 점 간격으로 수직선 반복', callout: '가리킬 곳 → 말풍선 자리',
+    xabcd: '점 5개 X A B C D', abcd: '점 4개 A B C D', hs: '점 7개: 시작 · 왼어깨 · 골 · 머리 · 골 · 오른어깨 · 끝', elliott5: '점 6개: 0 1 2 3 4 5', elliott3: '점 4개: 0 A B C', triangle: '점 3개' };
   const TOOL_GROUPS = [
-    ['lines', '선', ['trend', 'ray', 'ext', 'arrow', 'hline', 'hray', 'vline', 'channel']],
+    ['lines', '선', ['trend', 'ray', 'info', 'ext', 'angle', 'hline', 'hray', 'vline', 'cross', 'arrow', 'channel', 'regression', 'cycles']],
     ['fibs', '피보나치 · 피치포크', ['fib', 'fibext', 'fibchannel', 'fibtime', 'pitchfork']],
-    ['shapes', '도형 · 붓', ['rect', 'ellipse', 'brush']],
-    ['notes', '주석', ['text']],
-    ['proj', '예측 · 측정', ['long', 'short', 'measure', 'daterange', 'dpr']],
+    ['patterns', '패턴', ['xabcd', 'abcd', 'hs', 'elliott5', 'elliott3']],
+    ['proj', '예측 · 측정', ['long', 'short', 'measure', 'daterange', 'dpr', 'vwap']],
+    ['shapes', '도형 · 붓', ['rect', 'ellipse', 'triangle', 'path', 'brush']],
+    ['notes', '주석', ['text', 'callout', 'pricelabel']],
   ];
   const toolName = k => (TOOL_DEF[k] || [k])[0];
   function renderTools() {
@@ -3618,7 +3830,7 @@ const UI = (() => {
     bar.hidden = false; bar.dataset.id = d.id;
     bar.innerHTML = `<span class="nm">${esc(toolName(d.type))}</span>
       ${noColor ? '' : `<label class="sw" title="색" style="--c:${col}"><input type="color" data-k="color" value="${col}"></label>`}
-      ${d.type === 'text' ? `<select data-k="size" title="글자 크기">${[10, 12, 14, 18, 24, 32].map(v => `<option value="${v}"${(d.style.size || 14) == v ? ' selected' : ''}>${v}</option>`).join('')}</select>`
+      ${d.type === 'text' || d.type === 'callout' ? `<select data-k="size" title="글자 크기">${[10, 12, 14, 18, 24, 32].map(v => `<option value="${v}"${(d.style.size || 14) == v ? ' selected' : ''}>${v}</option>`).join('')}</select>`
         : `<select data-k="w" title="두께">${[1, 2, 3, 4].map(v => `<option value="${v}"${d.style.w == v ? ' selected' : ''}>${v}px</option>`).join('')}</select>
       <button data-k="dash" class="${d.style.dash ? 'on' : ''}" title="점선">${SB_ICON.dash}</button>`}
       <i class="sep"></i><button data-a="set" title="설정 (두 번 클릭)">${SB_ICON.set}</button><button data-a="dup" title="복제">${SB_ICON.dup}</button><button data-a="del" title="삭제 (Delete)">${SB_ICON.del}</button>`;
@@ -3909,10 +4121,11 @@ const UI = (() => {
       if (dlg().open || ST.view !== 'chart') return;
       const t = e.target; if (t.closest && t.closest('input,textarea,select,[contenteditable]')) return;
       if (e.altKey && !e.ctrlKey && !e.metaKey) {
-        const m = { t: 'trend', h: 'hline', f: 'fib', v: 'vline', m: 'measure', r: 'fit' }[e.key.toLowerCase()] || ({ KeyT: 'trend', KeyH: 'hline', KeyF: 'fib', KeyV: 'vline', KeyM: 'measure', KeyR: 'fit' })[e.code];
+        const m = { t: 'trend', h: 'hline', f: 'fib', v: 'vline', m: 'measure', r: 'fit', c: 'cross', j: 'hray' }[e.key.toLowerCase()] || ({ KeyT: 'trend', KeyH: 'hline', KeyF: 'fib', KeyV: 'vline', KeyM: 'measure', KeyR: 'fit', KeyC: 'cross', KeyJ: 'hray' })[e.code];
         if (m === 'fit') { CH.fit(); e.preventDefault(); return; }
         if (m) { CH.setTool(m); e.preventDefault(); return; }
       }
+      if (e.key === 'Enter' && CH.drawings.creating) { CH.finishCreate(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'KeyZ' || e.code === 'KeyY')) {
         const redo = e.code === 'KeyY' || e.shiftKey;
         if (redo ? CH.redo() : CH.undo()) toast(redo ? '다시 했습니다' : '되돌렸습니다', 1200); e.preventDefault(); return;
