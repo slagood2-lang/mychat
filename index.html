@@ -715,22 +715,24 @@ const IND = (() => {
     const N = C.length, up = new Int8Array(N), dn = new Int8Array(N), cdB = new Int8Array(N), cdS = new Int8Array(N), segs = [];
     let bs = 0, ss = 0, bcd = 0, scd = 0, bAct = false, sAct = false, openB = null, openS = null;
     for (let i = 4; i < N; i++) {
+      // 트레이딩뷰 TD 스크립트처럼: 9가 된 뒤에도 같은 방향이 이어지면 세기를 계속하고(10, 11…, 표시는 안 함)
+      // 방향이 끊겨야 새 셋업을 셈 → 같은 추세에서 9가 또 생기지 않음
       bs = C[i] < C[i - 4] ? bs + 1 : 0;
       ss = C[i] > C[i - 4] ? ss + 1 : 0;
-      if (bs) dn[i] = bs; if (ss) up[i] = ss;
+      if (bs && bs <= 9) dn[i] = bs; if (ss && ss <= 9) up[i] = ss;
       if (bs === 9) {
         let hi = -Infinity, lo = Infinity; for (let j = i - 8; j <= i; j++) { hi = Math.max(hi, H[j]); lo = Math.min(lo, L[j]); }
         const b9 = tdstMode === 'bar9';   // 트레이딩뷰 TD 스크립트: 9번째 봉 저가에서 다음 매수 셋업까지
         if (openB) openB.i1 = b9 ? i - 1 : i - 9;
         openB = { i0: b9 ? i : i - 8, i1: null, price: b9 ? L[i] : tdstMode === 'demark' ? hi : lo, type: 'B' }; segs.push(openB);
-        if (!bAct) { bAct = true; bcd = 0; } sAct = false; scd = 0; bs = 0;
+        if (!bAct) { bAct = true; bcd = 0; } sAct = false; scd = 0;
       }
       if (ss === 9) {
         let hi = -Infinity, lo = Infinity; for (let j = i - 8; j <= i; j++) { hi = Math.max(hi, H[j]); lo = Math.min(lo, L[j]); }
         const b9 = tdstMode === 'bar9';   // 9번째 봉 고가에서 다음 매도 셋업까지
         if (openS) openS.i1 = b9 ? i - 1 : i - 9;
         openS = { i0: b9 ? i : i - 8, i1: null, price: b9 ? H[i] : tdstMode === 'demark' ? lo : hi, type: 'S' }; segs.push(openS);
-        if (!sAct) { sAct = true; scd = 0; } bAct = false; bcd = 0; ss = 0;
+        if (!sAct) { sAct = true; scd = 0; } bAct = false; bcd = 0;
       }
       if (bAct && C[i] <= L[i - 2]) { cdB[i] = ++bcd; if (bcd === 13) bAct = false; }
       if (sAct && C[i] >= H[i - 2]) { cdS[i] = ++scd; if (scd === 13) sAct = false; }
@@ -775,7 +777,21 @@ const IND = (() => {
   const fibPrice = (p1, p2, r, log = true) => log && p1 > 0 && p2 > 0
     ? Math.exp(Math.log(p2) + r * (Math.log(p1) - Math.log(p2))) : p2 + r * (p1 - p2);
 
-  return { emaP, smaP, rmaP, last, rsi, wt, macd, bb, nweRepaint, nweEndpoint, td, trendStats, toYearly, fibPrice };
+  // ---- Fibonacci Bollinger Bands (Rashad): 기준선 = VWMA(src, len), 폭 = mult × 표준편차(모집단, ta.stdev와 같음)
+  //      선 = 기준선 ± r × 폭 (r = 0.236, 0.382, 0.5, 0.618, 0.764, 1)
+  const FBB_LV = [0.236, 0.382, 0.5, 0.618, 0.764, 1];
+  function fbb(H, L, C, V, len = 200, mult = 3, src = 'hlc3') {
+    const N = C.length, x = C.map((c, i) => src === 'close' ? c : src === 'hl2' ? (H[i] + L[i]) / 2 : src === 'ohlc4' ? (H[i] + L[i] + c + c) / 4 : (H[i] + L[i] + c) / 3);
+    const basis = new Array(N).fill(NaN), dev = new Array(N).fill(NaN);
+    let sv = 0, sxv = 0, sx = 0, sxx = 0;
+    for (let i = 0; i < N; i++) {
+      const v = V[i] || 0; sv += v; sxv += x[i] * v; sx += x[i]; sxx += x[i] * x[i];
+      if (i >= len) { const j = i - len, vj = V[j] || 0; sv -= vj; sxv -= x[j] * vj; sx -= x[j]; sxx -= x[j] * x[j]; }
+      if (i >= len - 1) { const m = sx / len; basis[i] = sv > 0 ? sxv / sv : m; dev[i] = mult * Math.sqrt(Math.max(0, sxx / len - m * m)); }
+    }
+    return { basis, dev, levels: FBB_LV };
+  }
+  return { emaP, smaP, rmaP, last, rsi, wt, macd, bb, nweRepaint, nweEndpoint, td, trendStats, toYearly, fibPrice, fbb, FBB_LV };
 })();
 
 
@@ -979,8 +995,13 @@ const FibScan = (() => {
   }
 
   // ---------- 2단계: 일봉·4시간·1시간 장기 이평 + NWE ----------
-  function analyzeTF(k, o, doMa, doNwe) {
+  function analyzeTF(k, o, doMa, doNwe, doFbb) {
     const C = k.map(x => +x[4]), price = C.at(-1), out = { bars: k.length };
+    if (doFbb && C.length >= o.fbbLen) {
+      const f = IND.fbb(k.map(x => +x[2]), k.map(x => +x[3]), C, k.map(x => +x[5]), o.fbbLen, o.fbbMult, o.fbbSrc);
+      const b = f.basis.at(-1), d = f.dev.at(-1);
+      if (isFinite(b) && isFinite(d)) out.fbb = { basis: b, dev: d, lines: [[0, b], ...f.levels.flatMap(r => [[r, b + r * d], [-r, b - r * d]])] };
+    }
     if (doMa) {
       out.ma = {};
       for (const len of o.maLens) {
@@ -1043,13 +1064,14 @@ const FibScan = (() => {
         if (x.nwe.lower > 0) L.push({ p: x.nwe.lower, kind: 'nweLo', cell: `${tf}_nwe`, t: `${TFN[tf]} NWE 하단` });
         L.push({ p: x.nwe.upper, kind: 'nweUp', cell: `${tf}_nwe`, t: `${TFN[tf]} NWE 상단` });
       }
+      if (x.fbb) for (const [r, p] of x.fbb.lines) if (p > 0) L.push({ p, kind: 'fbb', cell: `${tf}_fbb`, t: `${TFN[tf]} FBB ${r === 0 ? '기준' : r > 0 ? '+' + r : r}` });
     }
     for (const x of L) x.d = (x.p / r.price - 1) * 100;
     return L.sort((a, b) => b.p - a.p);
   }
   const CELLS = [
     ...['full', 'atl', 'ath', 'look'].map(b => ({ id: 'fib_' + b, g: 'fib', t: '피보 ' + FIB_NAME[b] })),
-    ...FIXED_TFS.flatMap(tf => [...MA_KEYS.map(k => ({ id: `${tf}_${k}`, g: tf, t: `${TFN[tf]} ${MA_NAME[k]}` })), { id: `${tf}_nwe`, g: tf, t: `${TFN[tf]} NWE` }]),
+    ...FIXED_TFS.flatMap(tf => [...MA_KEYS.map(k => ({ id: `${tf}_${k}`, g: tf, t: `${TFN[tf]} ${MA_NAME[k]}` })), { id: `${tf}_nwe`, g: tf, t: `${TFN[tf]} NWE` }, { id: `${tf}_fbb`, g: tf, t: `${TFN[tf]} FBB 200` }]),
   ];
   function buildZones(levels, o) {
     const inRange = levels.filter(x => Math.abs(x.d) <= o.zoneRange).sort((a, b) => a.p - b.p);
@@ -1086,7 +1108,7 @@ const FibScan = (() => {
     r.cells = Object.fromEntries(CELLS.map(c => [c.id, on.has(c.id) ? 'on' : avail.has(c.id) ? 'off' : 'na']));
     r.arrows = arrows; r.levels = levels; r.near = near; r.score = on.size;
     r.scoreItems = [
-      ...near.map(x => ({ k: x.kind === 'fib' ? 'fib' : x.kind === 'ma' ? 'ma' : x.kind === 'nweLo' ? 'nweUp' : 'nweDn', t: x.t })),
+      ...near.map(x => ({ k: x.kind === 'fib' ? 'fib' : x.kind === 'ma' || x.kind === 'fbb' ? 'ma' : x.kind === 'nweLo' ? 'nweUp' : 'nweDn', t: x.t })),
       ...Object.entries(arrows).map(([tf, a]) => ({ k: a.dir === 'up' ? 'nweUp' : 'nweDn', t: `${TFN[tf]} NWE${a.dir === 'up' ? '▲' : '▼'}` })),
     ];
     const zones = buildZones(levels, o);
@@ -1111,6 +1133,7 @@ const FibScan = (() => {
     useFib: true, trend: 'all', rsiMin: null, rsiMax: null, ema: 'all', touch: 'all',
     maTfs: ['1d', '4h', '1h'], maLens: [450, 2000], maF: {}, maScope: 'any', maNear: 2,
     nweTfs: ['1d', '4h', '1h'], nweH: 8, nweMult: 3, nweF: 'all', nweScope: 'any', nweNear: 1, nweLook: 3,
+    fbbTfs: ['1d', '4h', '1h'], fbbLen: 200, fbbMult: 3, fbbSrc: 'hlc3',
     wtN1: 10, wtN2: 21, wtOB2: 53, wtOS2: -53, wtLook: 3, wtF: 'all', tdF: 'all', tdLook: 2 };
 
   // o.keys: ['YAHOO:SI=F', 'BINANCE:BTCUSDT', ...] 를 주면 그 목록만 스캔 (관심목록·종목찾기 결과)
@@ -1146,8 +1169,8 @@ const FibScan = (() => {
     const needSel = isYear ? 99 : Math.max(499, o.fibBases.includes('look') ? o.lookback + 1 : 0);
     const tf2 = {};
     for (const tf of FIXED_TFS) {
-      const doMa = o.maTfs.includes(tf), doNwe = o.nweTfs.includes(tf);
-      if (doMa || doNwe) tf2[tf] = { doMa, doNwe, need: Math.max(doMa ? MA_NEED[tf] : 0, doNwe ? 501 : 0) };
+      const doMa = o.maTfs.includes(tf), doNwe = o.nweTfs.includes(tf), doFbb = (o.fbbTfs || []).includes(tf);
+      if (doMa || doNwe || doFbb) tf2[tf] = { doMa, doNwe, doFbb, need: Math.max(doMa ? MA_NEED[tf] : 0, doNwe ? 501 : 0, doFbb ? o.fbbLen + 1 : 0) };
     }
     const stage2 = Object.keys(tf2).length > 0;
 
@@ -1166,7 +1189,7 @@ const FibScan = (() => {
             r.tf = {};
             for (const [tf, c] of Object.entries(tf2)) {
               const kk = (tf === o.interval && k.length >= c.need) ? k : await getK(key, tf, c.need);
-              r.tf[tf] = kk.length >= 50 ? analyzeTF(kk, o, c.doMa, c.doNwe) : { bars: kk.length, ma: c.doMa ? {} : undefined, nwe: null };
+              r.tf[tf] = kk.length >= 50 ? analyzeTF(kk, o, c.doMa, c.doNwe, c.doFbb) : { bars: kk.length, ma: c.doMa ? {} : undefined, nwe: null };
             }
             if (maActive(o)) {
               const scope = o.maScope === 'any' ? o.maTfs : [o.maScope];
@@ -2655,6 +2678,32 @@ const CH = (() => {
           values: i => [{ c: inst.p.color, t: `${fp(r.mid[i])} ${fp(r.up[i])} ${fp(r.lo[i])}` }] };
       },
     },
+    fbb: {
+      name: 'Fibonacci Bollinger Bands (FBB)', desc: '트레이딩뷰 FBB (Rashad) 계산: 기준 VWMA(200, hlc3) ± 0.236·0.382·0.5·0.618·0.764·1 × 3표준편차',
+      inputs: [{ k: 'len', l: '길이', t: 'num', min: 2 }, { k: 'src', l: '소스', t: 'sel', o: SRC_OPTS }, { k: 'mult', l: '표준편차 배수', t: 'num', step: 0.1 },
+        { k: 'inner', l: '안쪽 선 (0.236~0.764)', t: 'sel', o: [['faint', '흐리게 (기본)'], ['line', '보이기'], ['none', '숨김']] },
+        { k: 'basisColor', l: '기준선 색', t: 'color' }, { k: 'upColor', l: '위 1 색', t: 'color' }, { k: 'dnColor', l: '아래 1 색', t: 'color' }, { k: 'innerColor', l: '안쪽 선 색', t: 'color' }],
+      defaults: { len: 200, src: 'hlc3', mult: 3, inner: 'faint', basisColor: '#e040fb', upColor: '#f23645', dnColor: '#22ab94', innerColor: '#9598a1' },
+      title: i => `FBB ${i.p.len} ${i.p.src} ${i.p.mult}`,
+      create(env, inst) {
+        const P = inst.p, LV = IND.FBB_LV, lab = !!cfg.indLabels;
+        const mk = (c, w, st = 0) => chart.addSeries(LW().LineSeries, ov(lineOpts(c, w, { lineStyle: st, lastValueVisible: lab })));
+        const basis = mk(P.basisColor, 2), lines = [];
+        for (const r of LV) for (const sgn of [1, -1]) {
+          if (r < 1 && P.inner === 'none') continue;
+          const c = r === 1 ? (sgn > 0 ? P.upColor : P.dnColor) : P.inner === 'faint' ? alpha(P.innerColor, 0.35) : P.innerColor;
+          lines.push({ r: r * sgn, s: mk(c, r === 1 ? 2 : 1, r === 1 ? 0 : 2) });
+        }
+        let f = null;
+        const fill = () => {
+          f = IND.fbb(D.H, D.L, D.C, D.V, P.len, P.mult, P.src);
+          const ok = v => isFinite(v) && (cfg.scale !== 'log' || v > 0);
+          basis.setData(f.basis.map((v, i) => ({ time: D.T[i], value: v })).filter(x => ok(x.value)));
+          for (const L of lines) L.s.setData(f.basis.map((b, i) => ({ time: D.T[i], value: b + L.r * f.dev[i] })).filter(x => ok(x.value)));
+        };
+        return { fill, values: i => f && isFinite(f.basis[i]) ? [{ c: P.basisColor, t: fp(f.basis[i]) }, { c: P.upColor, t: fp(f.basis[i] + f.dev[i]) }, { c: P.dnColor, t: fp(f.basis[i] - f.dev[i]) }] : [{ c: C.muted(), t: '-' }] };
+      },
+    },
     nwe: {
       name: 'Nadaraya-Watson Envelope [LuxAlgo]', desc: '원본(CC BY-NC-SA 4.0) 계산 그대로 · 밴드와 ▲▼ 표시',
       inputs: [{ k: 'h', l: 'Bandwidth', t: 'num', step: 0.5, min: 0.5 }, { k: 'mult', l: 'Mult', t: 'num', step: 0.1 }, { k: 'repaint', l: 'Repainting Smoothing (다시 그리기)', t: 'bool' },
@@ -2685,12 +2734,12 @@ const CH = (() => {
     td: {
       name: 'TD Sequential', desc: '셋업 1~9, 카운트다운 13, TDST 선',
       inputs: [{ k: 'counts', l: '셋업 숫자', t: 'sel', o: [['9', '9만 (기본)'], ['789', '7·8·9만'], ['all', '1~9 모두'], ['none', '숨김']] },
-        { k: 'cd', l: '카운트다운', t: 'sel', o: [['13', '13만'], ['all', '1~13 모두'], ['none', '숨김']] },
+        { k: 'cd', l: '카운트다운', t: 'sel', o: [['none', '숨김 (트레이딩뷰 스크립트처럼)'], ['13', '13만'], ['all', '1~13 모두']] },
         { k: 'tdst', l: 'TDST 선', t: 'bool' },
         { k: 'tdstMode', l: 'TDST 기준', t: 'sel', o: [['bar9', '9번째 봉 고가·저가 (트레이딩뷰 TD 스크립트와 같음)'], ['extreme', '매도셋업 최고가 · 매수셋업 최저가'], ['demark', '디마크 원본 (매수셋업 최고가 저항 · 매도셋업 최저가 지지)']] },
         { k: 'tdstW', l: 'TDST 선 두께', t: 'num', min: 1, max: 4 },
         { k: 'upColor', l: '상승 카운트 색', t: 'color' }, { k: 'dnColor', l: '하락 카운트 색', t: 'color' }, { k: 'cdColor', l: '카운트다운 색', t: 'color' }],
-      defaults: { counts: '9', cd: '13', tdst: true, tdstMode: 'bar9', tdstW: 2, upColor: '#22ab94', dnColor: '#f23645', cdColor: '#f0b429' },
+      defaults: { counts: '9', cd: 'none', tdst: true, tdstMode: 'bar9', tdstW: 2, upColor: '#22ab94', dnColor: '#f23645', cdColor: '#f0b429' },
       title: () => 'TD Sequential',
       create(env, inst) {
         let r = null;
@@ -2763,7 +2812,7 @@ const CH = (() => {
       },
     },
     zones: {
-      name: '겹침 구간 (자동)', desc: '로그 피보 · 1D/4H/1H 이평 450·2000 · NWE가 겹치는 지지·저항 구간을 띠로 표시. 종목을 열면 자동 계산',
+      name: '겹침 구간 (자동)', desc: '로그 피보 · 1D/4H/1H 이평 450·2000 · NWE · FBB(200, hlc3, 3)가 겹치는 지지·저항 구간을 띠로 표시. 종목을 열면 자동 계산',
       inputs: [{ k: 'minN', l: '최소 겹침 수', t: 'num', min: 2 }, { k: 'all', l: '가까운 구간만 말고 모두', t: 'bool' },
         { k: 'labels', l: '구간 이름 글자', t: 'bool' }, { k: 'opacity', l: '띠 진하기 (%)', t: 'num', min: 5, max: 60 }],
       defaults: { minN: 3, all: false, labels: true, opacity: 16 },
@@ -2919,14 +2968,14 @@ const CH = (() => {
   const DEFAULT_LAYOUT = () => [
     mkInst('vol'), mkInst('ema', { len: 450, color: '#3b82f6' }), mkInst('ma', { len: 450, color: '#f0b429' }),
     mkInst('ema', { len: 2000, color: '#a855f7' }), mkInst('ma', { len: 2000, color: '#ec4899' }),
-    mkInst('nwe'), mkInst('td'), mkInst('autofib', {}, false), mkInst('zones'), mkInst('wt', {}, false), mkInst('oi'), mkInst('funding'),
+    mkInst('nwe'), mkInst('td'), mkInst('fbb', {}, false), mkInst('autofib', {}, false), mkInst('zones'), mkInst('wt', {}, false), mkInst('oi'), mkInst('funding'),
   ];
   // 「전체 차트」 레이아웃: 트레이딩뷰 BTCUSD CRYPTO 주봉 차트처럼 NWE + TD + 로그 피보 + 겹침 구간 (나머지는 숨김으로 준비)
   const FULL_LAYOUT = () => [
     mkInst('nwe'), mkInst('td'), mkInst('autofib'), mkInst('zones'),
     mkInst('ema', { len: 450, color: '#3b82f6' }, false), mkInst('ma', { len: 450, color: '#f0b429' }, false),
     mkInst('ema', { len: 2000, color: '#a855f7' }, false), mkInst('ma', { len: 2000, color: '#ec4899' }, false),
-    mkInst('vol', {}, false), mkInst('wt', {}, false),
+    mkInst('fbb', {}, false), mkInst('vol', {}, false), mkInst('wt', {}, false),
   ];
   const normLayout = arr => Array.isArray(arr) && arr.length ? arr.filter(x => TYPES[x.type]).map(x => ({ ...x, p: { ...TYPES[x.type].defaults, ...x.p } })) : null;
   function setLayout(arr, noRender) { layout = normLayout(arr) || DEFAULT_LAYOUT(); if (D.N && !noRender) render(true); return layout; }
@@ -3306,6 +3355,13 @@ const UI = (() => {
     }
     if (!ST.lists.some(l => l.items.includes('COINBASE:BTCUSD'))) { const L = ST.lists[0]; const i = L.items.indexOf('BINANCE:BTCUSDT'); L.items.splice(i < 0 ? 0 : i + 1, 0, 'COINBASE:BTCUSD'); }
     for (const l of FULL_LISTS()) if (!ST.lists.some(x => x.name === l.name)) ST.lists.push(l);
+  }
+  // v4: TD 카운트다운 13 숨김 (트레이딩뷰 TD 스크립트처럼) · FBB(숨김) 추가
+  if (!ST.v4) {
+    ST.v4 = 1;
+    const fix = arr => { if (!Array.isArray(arr)) return; for (const x of arr) if (x.type === 'td') x.p = { ...x.p, cd: 'none' };
+      if (!arr.some(x => x.type === 'fbb')) arr.push({ id: 'fbb_' + Math.random().toString(36).slice(2, 8), type: 'fbb', visible: false, p: {} }); };
+    fix(ST.layout); if (ST.layouts) { fix(ST.layouts.live); fix(ST.layouts.full); }
   }
   ST.layouts ||= { live: ST.layout || null, full: null };
   ST.layoutId ||= 'live';
@@ -4325,7 +4381,7 @@ const SCAN = (() => {
   const esc = UI.esc;
   const TF_NAME = { EQUITY: '미국', KR_EQUITY: '한국', HK_EQUITY: '홍콩', CN_EQUITY: '중국', COMMODITY: '원자재', FX: 'FX', PREMARKET: 'Pre-IPO' };
   const TFS = [['1d', '1D'], ['4h', '4H'], ['1h', '1H']];
-  const GROUPS = [['fib', '피보', 4], ['1d', '1D', 5], ['4h', '4H', 5], ['1h', '1H', 5]];
+  const GROUPS = [['fib', '피보', 4], ['1d', '1D', 6], ['4h', '4H', 6], ['1h', '1H', 6]];
   const CELL = 11, GAP = 2;
   const mxHead = () => `<span class="mxh">${GROUPS.map(([, n, c]) => `<i style="width:${c * (CELL + GAP) - GAP}px">${n}</i>`).join('')}</span>`;
   const COLS = [
@@ -4382,7 +4438,7 @@ const SCAN = (() => {
   }
   function zoneCell(z) {
     if (!z) return '<span class="dim">-</span>';
-    const kinds = z.kinds.map(k => k === 'fib' ? '<b class="k fib">피</b>' : k === 'ma' ? '<b class="k ma">이</b>' : '<b class="k nw">N</b>').join('');
+    const kinds = z.kinds.map(k => k === 'fib' ? '<b class="k fib">피</b>' : k === 'ma' ? '<b class="k ma">이</b>' : k === 'fbb' ? '<b class="k ma">B</b>' : '<b class="k nw">N</b>').join('');
     return `<span class="zc" title="${esc(z.members.join('\n'))}"><b class="zn n${Math.min(z.n, 6)}">${z.n}</b>${fp(z.lo)}~${fp(z.hi)} <span class="${z.d < 0 ? 'neg' : 'pos'}">${sg(z.d)}%</span> ${kinds}</span>`;
   }
   function tdShort(t) {
