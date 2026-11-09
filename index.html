@@ -3466,8 +3466,10 @@ const UI = (() => {
       const direct = q ? DS.resolveSync(q) : null;
       if (direct) {
         const alt = DS.liveAlt(direct);
-        if (alt) all.push({ key: alt.key, label: DS.label(alt.key), name: DS.nameOf(direct) || DS.nameOf(alt.key), exch: '⚡ 실시간 · 바이낸스' + (ALT_NOTE[alt.kind] ? ' · ' + ALT_NOTE[alt.kind] : '') });
-        all.push({ key: direct, label: DS.label(direct), name: DS.nameOf(direct) || '바로 열기', exch: DS.sourceLabel(direct) + (direct.startsWith('YAHOO:') ? (DS.srv.ok ? ' · 지연 · 긴 과거' : ' · PC 서버 필요') : '') });
+        const altRow = alt && { key: alt.key, label: DS.label(alt.key), name: DS.nameOf(direct) || DS.nameOf(alt.key), exch: '⚡ 실시간 · 바이낸스' + (ALT_NOTE[alt.kind] ? ' · ' + ALT_NOTE[alt.kind] : '') };
+        const realRow = { key: direct, label: DS.label(direct), name: DS.nameOf(direct) || '바로 열기', exch: DS.sourceLabel(direct) + (direct.startsWith('YAHOO:') ? (DS.srv.ok ? ' · PC 서버 · 긴 과거' : ' · PC 서버 필요') : '') };
+        // 한국 주식은 PC 서버가 켜져 있으면 원화(KRX) 먼저, 나머지는 실시간(바이낸스) 먼저
+        if (DS.srv.ok && /\.K[SQ]$/.test(direct)) all.push(realRow, ...(altRow ? [altRow] : [])); else all.push(...(altRow ? [altRow] : []), realRow);
       }
       for (const x of DS.localSearch(q)) if (!all.some(y => y.key && y.key === x.key)) all.push({ ...x, label: x.key ? DS.label(x.key) : x.id });
       paint();
@@ -3732,6 +3734,8 @@ const UI = (() => {
   function openChart(key, tab, opt = {}) {
     if (!key) return;
     if (opt.layout) useLayout(opt.layout, false);
+    // PC 서버를 아직 확인 안 했으면 먼저 확인 (켜져 있으면 원화·야후 그대로 열기)
+    if (key.startsWith('YAHOO:') && DS.srv.enabled && DS.srv.ok == null && !opt.pinged) { DS.ping().then(() => { paintSrv && paintSrv(); openChart(key, tab, { ...opt, pinged: true }); }); return; }
     if (key.startsWith('YAHOO:') && DS.srv.ok !== true) {
       const alt = DS.liveAlt(key);
       if (alt) { toast(`${DS.label(key)} → ${DS.label(alt.key)} 바이낸스 실시간으로 열었습니다${ALT_NOTE[alt.kind] ? ' (' + ALT_NOTE[alt.kind] + ')' : ''}`, 4000); key = alt.key; }

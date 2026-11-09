@@ -545,7 +545,18 @@ def main(argv=None):
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--selftest", action="store_true", help="야후·코인게코 데이터 받아오기 점검")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--log", help="출력을 이 파일에 기록 (창 없이 실행할 때)")
     o = ap.parse_args(argv)
+    # 창 없이(pythonw) 실행하면 출력 통로가 없어 요청 기록에서 멈출 수 있음 → 파일로
+    if o.log or sys.stdout is None or sys.stderr is None:
+        path = o.log or os.path.join(HERE, "chart_server.log")
+        try:
+            if os.path.exists(path) and os.path.getsize(path) > 2_000_000:
+                os.replace(path, path + ".old")
+        except OSError:
+            pass
+        f = open(path, "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = f
     logging.basicConfig(level=logging.DEBUG if o.verbose else logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if o.selftest:
         sys.exit(0 if selftest() else 1)
@@ -553,7 +564,11 @@ def main(argv=None):
         print("yfinance", yf().__version__)
     except RuntimeError as e:
         print("경고:", e, "\n(바이낸스 종목 차트는 그대로 됩니다)")
-    srv = ThreadingHTTPServer(("127.0.0.1", o.port), Handler)
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", o.port), Handler)
+    except OSError:
+        print(f"포트 {o.port}이(가) 이미 쓰이는 중입니다 (서버가 이미 켜져 있을 수 있음).")
+        return
     url = f"http://localhost:{o.port}/"
     print(f"나만의 차트: {url}  (끄려면 Ctrl+C)")
     if not o.no_browser:
