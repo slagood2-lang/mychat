@@ -2016,7 +2016,7 @@ const CH = (() => {
       for (const L of this.layers.values()) for (const b of L.bands || []) {
         const y1 = yOf(b.p1), y2 = yOf(b.p2); if (y1 == null || y2 == null) continue;
         ctx.fillStyle = b.color; ctx.fillRect(0, Math.min(y1, y2), sz.width, Math.max(1, Math.abs(y2 - y1)));
-        if (b.label) { ctx.font = '600 11px ' + css('--f-body'); ctx.fillStyle = b.text || b.color; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(b.label, sz.width - 8, Math.min(y1, y2) - 2); }
+        if (b.label) { ctx.font = '600 10px ' + css('--f-body'); ctx.globalAlpha = 0.75; ctx.fillStyle = b.text || b.color; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(b.label, sz.width - 8, Math.min(y1, y2) - 2); ctx.globalAlpha = 1; }
       }
     }
     drawTop({ context: ctx, mediaSize: sz }) {
@@ -2037,13 +2037,15 @@ const CH = (() => {
           }
         }
         ctx.setLineDash([]);
-        const texts = L.texts || [];
-        for (const t of texts) {
-          if (t.i < a || t.i > z) continue;
-          const x = xOf(t.i), y = yOf(t.p); if (x == null || y == null) continue;
-          ctx.font = t.font || ('10px ' + css('--f-mono')); ctx.fillStyle = t.color; ctx.textAlign = 'center';
-          ctx.textBaseline = t.dy < 0 ? 'bottom' : 'top'; ctx.fillText(t.text, x, y + t.dy);
-        }
+      }
+      // 글자(TD 숫자·▲▼)는 모든 선·띠 위에, 바탕색 테두리를 둘러 잘 보이게
+      const bg = cfg.bg || css('--chart-bg');
+      for (const L of this.layers.values()) for (const t of L.texts || []) {
+        if (t.i < a || t.i > z) continue;
+        const x = xOf(t.i), y = yOf(t.p); if (x == null || y == null) continue;
+        ctx.font = t.font || ('10px ' + css('--f-mono')); ctx.textAlign = 'center'; ctx.textBaseline = t.dy < 0 ? 'bottom' : 'top';
+        if (t.halo) { ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = bg; ctx.strokeText(t.text, x, y + t.dy); }
+        ctx.fillStyle = t.color; ctx.fillText(t.text, x, y + t.dy);
       }
     }
   }
@@ -2748,11 +2750,11 @@ const CH = (() => {
             r = IND.td(D.H, D.L, D.C, inst.p.tdstMode);
             const P = inst.p, texts = [], segs = [];
             const show = n => P.counts === 'all' || (P.counts === '789' && n >= 7) || (P.counts === '9' && n === 9);
-            const font = n => (n === 9 ? '700 12px ' : '10px ') + css('--f-mono');
+            const font = n => (n === 9 ? '800 13px ' : '10px ') + css('--f-mono');
             for (let i = 0; i < D.N; i++) {
               if (P.counts !== 'none') {
-                if (r.up[i] && show(r.up[i])) texts.push({ i, p: D.H[i], dy: -3, text: String(r.up[i]), color: P.upColor, font: font(r.up[i]) });
-                if (r.dn[i] && show(r.dn[i])) texts.push({ i, p: D.L[i], dy: 3, text: String(r.dn[i]), color: P.dnColor, font: font(r.dn[i]) });
+                if (r.up[i] && show(r.up[i])) texts.push({ i, p: D.H[i], dy: -3, text: String(r.up[i]), color: P.upColor, font: font(r.up[i]), halo: r.up[i] === 9 });
+                if (r.dn[i] && show(r.dn[i])) texts.push({ i, p: D.L[i], dy: 3, text: String(r.dn[i]), color: P.dnColor, font: font(r.dn[i]), halo: r.dn[i] === 9 });
               }
               if (P.cd !== 'none') {
                 for (const [arr, below] of [[r.cdB, true], [r.cdS, false]]) {
@@ -2814,8 +2816,8 @@ const CH = (() => {
     zones: {
       name: '겹침 구간 (자동)', desc: '로그 피보 · 1D/4H/1H 이평 450·2000 · NWE · FBB(200, hlc3, 3)가 겹치는 지지·저항 구간을 띠로 표시. 종목을 열면 자동 계산',
       inputs: [{ k: 'minN', l: '최소 겹침 수', t: 'num', min: 2 }, { k: 'all', l: '가까운 구간만 말고 모두', t: 'bool' },
-        { k: 'labels', l: '구간 이름 글자', t: 'bool' }, { k: 'opacity', l: '띠 진하기 (%)', t: 'num', min: 5, max: 60 }],
-      defaults: { minN: 3, all: false, labels: true, opacity: 16 },
+        { k: 'labels', l: '구간 글자', t: 'sel', o: [['short', '겹침 수만 (기본)'], ['full', '무엇이 겹쳤는지까지'], ['none', '숨김']] }, { k: 'opacity', l: '띠 진하기 (%)', t: 'num', min: 5, max: 60 }],
+      defaults: { minN: 3, all: false, labels: 'short', opacity: 16 },
       title: () => '겹침 구간',
       create(env, inst) {
         let info = '계산 중…', stamp = S.key;
@@ -2826,7 +2828,7 @@ const CH = (() => {
           const a = Math.max(0.05, Math.min(0.6, (inst.p.opacity ?? 16) / 100));
           const col = z => z === r.zoneNow ? `rgba(240,180,41,${a + 0.04})` : z.mid < r.price ? `rgba(34,171,148,${a})` : `rgba(242,54,69,${a})`;
           overlay.set(inst.id, { bands: pick.map(z => ({ p1: z.lo, p2: z.hi, color: col(z), text: css('--fg'),
-            label: inst.p.labels ? `겹침 ${z.n} · ${z.members.slice(0, 3).join(', ')}${z.members.length > 3 ? '…' : ''}` : '' })) });
+            label: inst.p.labels === 'full' ? `겹침 ${z.n} · ${z.members.slice(0, 3).join(', ')}${z.members.length > 3 ? '…' : ''}` : inst.p.labels === 'none' || inst.p.labels === false ? '' : `겹침 ${z.n}` })) });
           info = (pick.length ? `${pick.length}개 구간` : `가까운 ${inst.p.minN}겹 이상 구간 없음`) + (r.auto ? ' · 자동 계산' : ' · 스캔 결과');
           refreshLegend();
         };
@@ -4053,6 +4055,29 @@ const UI = (() => {
     });
   }
 
+  // ---------------- 트레이딩뷰 링크: 데스크톱 앱 / 웹 ----------------
+  // 브라우저 안의 링크는 앱으로 넘어가지 않음 → PC 서버가 켜져 있으면 운영체제로 열어 앱이 받게 하고,
+  // 아니면 링크를 복사해 두고 앱 메뉴의 「클립보드 링크 열기」로 열게 안내 (트레이딩뷰 공식 방법)
+  async function openTvApp(url) {
+    if (DS.srv.enabled && DS.srv.ok !== false) {
+      try { await DS.api('/api/open-tv', { url }); toast('트레이딩뷰 앱으로 보냈습니다 (앱이 없으면 기본 브라우저로 열림)'); return; } catch {}
+    }
+    try { await navigator.clipboard.writeText(url); } catch { prompt('이 링크를 복사하세요', url); return; }
+    toast('링크를 복사했습니다 → 트레이딩뷰 앱 왼쪽 위 메뉴 → 「클립보드에서 링크 열기 (Open link from clipboard)」', 7000);
+  }
+  function bindTvLinks() {
+    document.addEventListener('click', e => {
+      const a = e.target.closest('a[href*="tradingview.com/chart"]'); if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      e.preventDefault(); e.stopPropagation();
+      const url = a.href, sym = decodeURIComponent((url.match(/symbol=([^&]+)/) || [])[1] || '');
+      showMenuAt(e.clientX, e.clientY, [
+        ['트레이딩뷰 앱(데스크톱)에서 열기', () => openTvApp(url)],
+        ['웹(tradingview.com)에서 열기', () => window.open(url, '_blank', 'noopener')],
+        ['링크 복사', () => navigator.clipboard.writeText(url).then(() => toast('복사했습니다'))],
+      ], sym || '트레이딩뷰');
+    }, true);
+  }
+
   // ---------------- 오른쪽 클릭 메뉴 ----------------
   // items: [글자, 할 일, {hint, check, danger, off}] 또는 '-'
   function showMenuAt(x, y, items, title) {
@@ -4349,7 +4374,7 @@ const UI = (() => {
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => ST.theme === 'system' && CH.rethemed());
     CH.init($('chart'), $('legend'), { layout: ST.layouts[ST.layoutId] || (ST.layoutId === 'full' ? null : ST.layout), fibTemplate: ST.fibTemplate, log: ST.log, magnet: ST.magnet, cfg: ST.chartCfg, onChange: onChartChange,
       saveLayout: l => { ST.layout = l; ST.layouts[ST.layoutId] = l; save(); }, scanInfo: k => scanIdx[k] || null });
-    bindFav(); bindRanges(); renderFav(); paintScale(); bindSelBar();
+    bindFav(); bindRanges(); renderFav(); paintScale(); bindSelBar(); bindTvLinks();
     watchServer();
     DS.loadCoinbase().catch(() => {});
     try { await DS.loadBinance(); }

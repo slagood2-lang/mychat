@@ -472,6 +472,16 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     return self.send(200, {"ok": True, "yfinance": None, "warn": str(e)})
                 return self.send(200, {"ok": True, "yfinance": ver})
+            if p == "/api/open-tv":
+                # 트레이딩뷰 링크를 운영체제로 열기 → 윈도우에서 트레이딩뷰 데스크톱 앱이 tradingview.com 링크를 맡고 있으면 앱으로 열림
+                url = arg("url")
+                if not re.match(r"^https://([a-z]{2,3}\.)?tradingview\.com/[\w\-./?=&%:!^]*$", url):
+                    raise ValueError("트레이딩뷰 링크만 열 수 있습니다")
+                if hasattr(os, "startfile"):
+                    os.startfile(url)
+                else:
+                    webbrowser.open(url)
+                return self.send(200, {"ok": True})
             if p == "/api/yf/klines":
                 sym = arg("symbol")
                 if not SYM_RE.match(sym):
