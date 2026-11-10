@@ -1855,7 +1855,34 @@ const DS = (() => {
     return (await api('/api/yf/klines', { symbol: id, tf, recent: 1 })).bars;
   }
 
-  // 실시간: 바이낸스는 웹소켓, 야후는 30초마다 최근 구간을 다시 받음
+  // 탭이 다시 보이거나 인터넷이 돌아오면 끊긴 동안의 봉을 다시 받게 알림
+  const wakeSubs = new Set(); let hiddenAt = 0;
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenAt = Date.now(); else if (hiddenAt && Date.now() - hiddenAt > 30000) for (const f of wakeSubs) f(); });
+    window.addEventListener('online', () => { for (const f of wakeSubs) f(); });
+  }
+  // 체결 웹소켓 (코인베이스 · Bitstamp): onTick(가격, 시각ms, 수량)
+  function tickFeed(src, id, onTick) {
+    let ws = null, stopped = false, retry = 0, timer = null, lastMsg = Date.now(), dog = null;
+    const base = id.replace(/USD$/, '');
+    const open = () => {
+      if (stopped) return;
+      try { ws = new WebSocket(src === 'coinbase' ? 'wss://ws-feed.exchange.coinbase.com' : 'wss://ws.bitstamp.net'); } catch { return; }
+      ws.onopen = () => { lastMsg = Date.now(); ws.send(JSON.stringify(src === 'coinbase' ? { type: 'subscribe', product_ids: [base + '-USD'], channels: ['ticker'] } : { event: 'bts:subscribe', data: { channel: 'live_trades_' + id.toLowerCase() } })); };
+      ws.onmessage = e => {
+        lastMsg = Date.now(); retry = 0; let m; try { m = JSON.parse(e.data); } catch { return; }
+        if (src === 'coinbase') { if (m.type === 'ticker' && +m.price) onTick(+m.price, Date.parse(m.time) || Date.now(), +m.last_size || 0); }
+        else if (m.event === 'trade' && m.data && +m.data.price) onTick(+m.data.price, (+m.data.timestamp || Date.now() / 1000) * 1000, +m.data.amount || 0);
+        else if (m.event === 'bts:request_reconnect') { try { ws.close(); } catch {} }
+      };
+      ws.onclose = () => { if (!stopped) timer = setTimeout(open, Math.min(30000, 1000 * 2 ** retry++)); };
+      ws.onerror = () => { try { ws.close(); } catch {} };
+    };
+    open();
+    dog = setInterval(() => { if (!stopped && !document.hidden && Date.now() - lastMsg > 120000) { lastMsg = Date.now(); try { ws.close(); } catch {} } }, 20000);
+    return () => { stopped = true; clearTimeout(timer); clearInterval(dog); try { ws && ws.close(); } catch {} };
+  }
+  // 실시간: 바이낸스는 봉 웹소켓, 코인베이스·CRYPTO는 체결 웹소켓 + 주기적 봉 확인, 야후는 30초마다
   function streamKline(key, tf, onBars) {
     const { src, id } = parseKey(key);
     let stopped = false, ws = null, timer = null, retry = 0;
@@ -1863,12 +1890,20 @@ const DS = (() => {
       const WSB = src === 'spot' ? 'wss://stream.binance.com:9443' : WS;
       const is3h = tf === '3h', hours = new Map();
       if (is3h) (src === 'spot' ? LONG.spot(id, '1h', Date.now(), 3) : FibScan.fetchKlines(id, '1h', 3)).then(k => { for (const x of k) hours.set(x[0], [x[0], +x[1], +x[2], +x[3], +x[4], +x[5], x[6], +x[7]]); }).catch(() => {});
+      let lastMsg = Date.now(), opened = 0, catching = false;
+      // 끊겼다 붙으면 그 사이 봉을 다시 받아 빈칸을 메움
+      const catchUp = async () => {
+        if (stopped || catching) return; catching = true;
+        try { const k = await klines(key, tf, { need: 500 }); if (!stopped && k && k.length) onBars(k); } catch (e) { console.warn('catchUp', key, e.message); }
+        catching = false;
+      };
       const open = () => {
         if (stopped) return;
         ws = new WebSocket(`${WSB}/ws/${id.toLowerCase()}@kline_${is3h ? '1h' : tf}`);
+        ws.onopen = () => { lastMsg = Date.now(); if (opened++) catchUp(); };
         ws.onmessage = e => {
           const k = JSON.parse(e.data).k; if (!k) return;
-          retry = 0;
+          retry = 0; lastMsg = Date.now();
           const bar = [k.t, +k.o, +k.h, +k.l, +k.c, +k.v, k.T, +k.q];
           if (!is3h) return onBars([bar]);
           hours.set(k.t, bar);
@@ -1880,28 +1915,58 @@ const DS = (() => {
         ws.onerror = () => { try { ws.close(); } catch {} };
       };
       open();
-      return { kind: '실시간', stop() { stopped = true; clearTimeout(timer); try { ws && ws.close(); } catch {} } };
+      // 소리 없이 멈춘 연결 (절전 뒤 등): 90초 동안 아무것도 안 오면 다시 연결
+      const dog = setInterval(() => { if (!stopped && !document.hidden && Date.now() - lastMsg > 90000) { lastMsg = Date.now(); try { ws.close(); } catch {} } }, 15000);
+      const wake = () => { if (ws && ws.readyState === 1) catchUp(); else { clearTimeout(timer); retry = 0; try { ws && ws.close(); } catch {} if (!ws || ws.readyState === 3) open(); } };
+      wakeSubs.add(wake);
+      return { kind: '실시간', stop() { stopped = true; clearTimeout(timer); clearInterval(dog); wakeSubs.delete(wake); try { ws && ws.close(); } catch {} } };
     }
-    const every = tf === '1y' ? 300000 : src === 'binance' ? 60000 : src === 'crypto' ? 10000 : src === 'coinbase' ? 5000 : 30000;
-    const poll = async () => {
+    const ticks = (src === 'coinbase' || src === 'crypto') && tf !== '1y';
+    const every = tf === '1y' ? 300000 : src === 'binance' ? 60000 : ticks ? 15000 : 30000;
+    // 체결로 지금 봉을 바로 고침. 봉 자체(시가·거래량·새 봉)는 주기적으로 받은 것이 기준
+    let cur = null, stopTicks = null, pend = null, flushT = 0;
+    const step = (TF_SEC[tf] || 0) * 1000, fixed = step && !['3d', '1w', '1M'].includes(tf);
+    const flush = () => { flushT = 0; if (!stopped && pend) { const b = pend; pend = null; onBars([b.slice()]); } };
+    const onTick = (p, t, q) => {
+      if (stopped || !cur) return;
+      if (t > cur[6]) { if (!fixed) return; const o = Math.floor(t / step) * step; if (o <= cur[0]) return; cur = [o, p, p, p, p, 0, o + step - 1, 0]; }
+      else if (t < cur[0]) return;
+      cur[4] = p; if (p > cur[2]) cur[2] = p; if (p < cur[3]) cur[3] = p; cur[5] += q; cur[7] += q * p;
+      pend = cur; if (!flushT) flushT = setTimeout(flush, 200);
+    };
+    const merge = k => {   // 받은 봉과 체결로 만든 지금 봉 합치기 (봉이 체결보다 늦게 올 수 있음)
+      if (!k || !k.length) return k;
+      const last = k[k.length - 1].map((v, i) => i === 0 || i === 6 ? v : +v);
+      if (cur && cur[0] === last[0]) { last[2] = Math.max(last[2], cur[2]); last[3] = Math.min(last[3], cur[3]); last[4] = cur[4]; cur = last; k = k.slice(0, -1).concat([last.slice()]); }
+      else if (cur && cur[0] > last[0]) k = k.concat([cur.slice()]);
+      else cur = last;
+      return k;
+    };
+    const poll = async (first) => {
       if (stopped) return;
       try {
         if (tf === '1y') onBars(await klines(key, '1y'), true);
-        else onBars(await recent(key, tf));
+        else { const k = await recent(key, tf); if (!stopped) onBars(ticks ? merge(k) : k); }
       } catch (e) { console.warn('poll', key, e.message); }
       if (!stopped) timer = setTimeout(poll, every);
     };
-    timer = setTimeout(poll, every);
-    return { kind: src === 'binance' ? '1분마다' : src === 'crypto' ? '10초마다' : src === 'coinbase' ? '5초마다' : '30초마다 (지연 가능)', stop() { stopped = true; clearTimeout(timer); } };
+    if (ticks) { poll(true); stopTicks = tickFeed(src, id, onTick); }
+    else timer = setTimeout(poll, every);
+    const wake = () => { clearTimeout(timer); poll(); };
+    wakeSubs.add(wake);
+    return { kind: src === 'binance' ? '1분마다' : ticks ? '실시간' : '30초마다 (지연 가능)',
+      stop() { stopped = true; clearTimeout(timer); clearTimeout(flushT); wakeSubs.delete(wake); stopTicks && stopTicks(); } };
   }
 
   // 바이낸스 전 종목 미니 시세 (관심목록 가격)
   function streamTickers(onUpdate) {
-    let ws = null, stopped = false, retry = 0, timer = null;
+    let ws = null, stopped = false, retry = 0, timer = null, lastMsg = Date.now();
+    setInterval(() => { if (!stopped && !document.hidden && Date.now() - lastMsg > 60000) { lastMsg = Date.now(); try { ws.close(); } catch {} } }, 15000);
+    wakeSubs.add(() => { if (!ws || ws.readyState !== 1) { clearTimeout(timer); retry = 0; try { ws && ws.close(); } catch {} if (!ws || ws.readyState === 3) open(); } });
     const open = () => {
       ws = new WebSocket(`${WS}/ws/!miniTicker@arr`);
       ws.onmessage = e => {
-        retry = 0; const arr = JSON.parse(e.data); const out = {};
+        retry = 0; lastMsg = Date.now(); const arr = JSON.parse(e.data); const out = {};
         for (const t of arr) out['BINANCE:' + t.s] = { price: +t.c, chgPct: (+t.c / +t.o - 1) * 100, qv: +t.q };
         onUpdate(out);
       };
@@ -3750,6 +3815,14 @@ const UI = (() => {
     if (key.startsWith('YAHOO:') && !px[key]) pollYahoo();
     if (/^(BINANCESPOT|CRYPTO|COINBASE):/.test(key) && !px[key]) pollOther();
   }
+  // 탭 제목에 현재가 (트레이딩뷰처럼), 1초에 한 번
+  let titleT = 0;
+  function paintTitle() {
+    const now = Date.now(); if (now - titleT < 1000) return; titleT = now;
+    const d = CH.data, n = d && d.N; if (!n || CH.state.key !== ST.key) return;
+    const c = d.C[n - 1], o = d.O[n - 1], up = c >= o;
+    document.title = `${DS.label(ST.key)} ${fpx(c)} ${up ? '▲' : '▼'} ${((c / o - 1) * 100).toFixed(2)}%`;
+  }
   function step(dir) {
     const items = sideItems(); if (!items.length) return;
     const i = items.indexOf(ST.key), n = i < 0 ? 0 : Math.max(0, Math.min(items.length - 1, i + dir));
@@ -3769,7 +3842,7 @@ const UI = (() => {
       msg(`<b>차트를 불러오지 못했습니다</b>${esc(arg)}${hint}`);
       const b = $('msgSrv'); if (b) b.onclick = serverDialog;
     }
-    if (ev === 'tick') renderDetail();
+    if (ev === 'tick') { renderDetail(); paintTitle(); }
     if (ev === 'tool') toolChanged();
     if (ev === 'select' || ev === 'tool') paintSelBar();
   }
