@@ -326,7 +326,20 @@ table.mini th,table.mini td{padding:3px 8px;text-align:left;position:static;curs
 .srf button{font-size:11.5px;padding:3px 9px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted)}
 .srf button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .srf button:hover:not(.on){background:var(--chip);color:var(--fg)}
+.split{display:none;flex-direction:column;gap:2px;background:var(--line);border-left:1px solid var(--line);min-width:0;min-height:0}
+.split iframe{flex:1 1 0;width:100%;min-height:0;border:0;display:block;background:var(--bg);outline:2px solid transparent;outline-offset:-2px}
+.split iframe.act{outline-color:var(--accent)}
+body.split-on .main{grid-template-columns:44px minmax(0,3fr) minmax(0,2fr) 320px}
+body.split-on .split{display:flex}
+body.split-on .chartWrap.act{outline:2px solid var(--accent);outline-offset:-2px}
+body.pane .side,body.pane .tools,body.pane #views,body.pane #srv,body.pane #menuBtn,body.pane #starBtn,body.pane #shotBtn,body.pane #cfgBtn,body.pane #layBtn,body.pane #splitBtn,body.pane #typeBtn,body.pane .rangebar,body.pane .favbar,body.pane .top .vsep,body.pane .top .grow{display:none!important}
+body.pane .main{grid-template-columns:minmax(0,1fr)}
+body.pane .top{overflow-x:auto;scrollbar-width:none;padding:2px 4px;gap:2px;min-height:0}
+body.pane .top::-webkit-scrollbar{display:none}
+body.pane .top>*{flex:0 0 auto}
 @media (max-width:980px){
+  body.split-on .split{display:none}
+  body.split-on .main{grid-template-columns:minmax(0,1fr)}
   body{overflow:auto}
   .app{height:auto;min-height:100%}
   .main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 66vh auto}
@@ -340,6 +353,11 @@ table.mini th,table.mini td{padding:3px 8px;text-align:left;position:static;curs
   .lg-row .vals{max-width:60vw}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* 분할 화면의 작은 차트는 좁아도 휴대폰 배치를 쓰지 않음 */
+body.pane{overflow:hidden!important}
+body.pane .app{height:100%!important;min-height:0!important}
+body.pane .main{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
+body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
 </style>
 </head>
 <body data-view="chart">
@@ -354,6 +372,7 @@ table.mini th,table.mini td{padding:3px 8px;text-align:left;position:static;curs
     <button class="tb chart-only" id="indBtn" title="지표 추가"><svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:-4px;margin-right:4px"><path d="M2 14l4-5 3 3 6-8" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>지표</button>
     <button class="tb tog chart-only" id="logBtn" title="로그 스케일">로그</button>
     <button class="tb chart-only lay" id="layBtn" title="레이아웃: 실시간 / 전체 차트 (트레이딩뷰 BTCUSD CRYPTO 주봉 구성)">실시간</button>
+    <button class="tb chart-only" id="splitBtn" title="차트 분할 (여러 차트 같이 보기)"></button>
     <button class="tb chart-only" id="shotBtn" title="차트 사진 저장"><svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="9" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 5l1.5-2h3L12 5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
     <button class="tb chart-only" id="cfgBtn" title="차트 설정"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 1.5v2.2M9 14.3v2.2M1.5 9h2.2M14.3 9h2.2M3.7 3.7l1.6 1.6M12.7 12.7l1.6 1.6M3.7 14.3l1.6-1.6M12.7 5.3l1.6-1.6" stroke="currentColor" stroke-width="1.3"/></svg></button>
     <span class="grow"></span>
@@ -391,6 +410,7 @@ table.mini th,table.mini td{padding:3px 8px;text-align:left;position:static;curs
         <button class="rb" data-scale="pct" title="퍼센트 스케일">%</button><button class="rb" data-scale="log" title="로그 스케일">log</button><button class="rb" data-scale="normal" title="일반 스케일">일반</button>
       </div>
     </section>
+    <section class="split" id="split"></section>
     <aside class="side">
       <div class="side-tabs" id="sideTabs"><button data-tab="wl">관심목록</button><button data-tab="scan">스캔 결과<small id="nScan"></small></button><button data-tab="disc">찾기 결과<small id="nDisc"></small></button></div>
       <div class="wl-head" id="wlHead">
@@ -3434,7 +3454,24 @@ const UI = (() => {
   ST.layoutId ||= 'live';
   ST.layoutTf ||= { live: ST.tf || '1d', full: '1w' };
   function read(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
-  function save() { try { localStorage.setItem(STORE, JSON.stringify(ST)); } catch {} }
+  // 분할 화면의 작은 차트 (?pane=N): 종목·봉·지표 구성만 따로 기억하고 나머지 설정은 본 화면 것을 읽기만 함
+  const PANE = new URLSearchParams(location.search).get('pane');
+  const PANE_KEYS = ['key', 'tf', 'layout', 'layouts', 'layoutId', 'layoutTf', 'log'];
+  if (PANE) {
+    const ps = read('mc.pane.' + PANE) || {};
+    ST.key = { 1: 'BINANCE:ETHUSDT', 2: 'BINANCE:QQQUSDT', 3: 'BINANCE:XAUUSDT' }[PANE] || 'BINANCE:ETHUSDT';
+    ST.layouts = JSON.parse(JSON.stringify(ST.layouts)); ST.layoutTf = { ...ST.layoutTf };
+    // 처음 여는 작은 차트는 아래 패널(OI·펀딩비)을 꺼서 캔들을 넓게
+    if (!ps.layouts) for (const l of [ST.layout, ...Object.values(ST.layouts)]) for (const x of l || []) if (x.type === 'oi' || x.type === 'funding') x.visible = false;
+    for (const k of PANE_KEYS) if (ps[k] != null) ST[k] = ps[k];
+    ST.view = 'chart'; ST.split = 0;
+  }
+  function save() {
+    try {
+      if (PANE) { const o = {}; for (const k of PANE_KEYS) o[k] = ST[k]; localStorage.setItem('mc.pane.' + PANE, JSON.stringify(o)); }
+      else localStorage.setItem(STORE, JSON.stringify(ST));
+    } catch {}
+  }
 
   const px = {};                 // key → {price, chgPct, qv}
   let scan = read('mc.scan') || { at: 0, rows: [] }, disc = read('mc.disc') || { at: 0, rows: [], market: null, mode: null };
@@ -3623,7 +3660,7 @@ const UI = (() => {
       const ds = e.target.closest('[data-delsec]'); if (ds) { curList().items.splice(+ds.dataset.delsec, 1); save(); renderList(); return; }
       const row = e.target.closest('.row'); if (!row) return;
       if (e.target.closest('.x')) { const L = curList(); L.items = L.items.filter(x => x !== row.dataset.key); save(); renderList(); paintStar(); return; }
-      openChart(row.dataset.key, null, ST.sideTab === 'wl' ? { layout: curList().layout || 'live' } : {});
+      openInActive(row.dataset.key, ST.sideTab === 'wl' ? { layout: curList().layout || 'live' } : {});
     });
     let dragI = null;
     list.addEventListener('dragstart', e => { const r = e.target.closest('.row[data-i]'); if (!r) return; dragI = +r.dataset.i; e.dataTransfer.effectAllowed = 'move'; });
@@ -4446,6 +4483,41 @@ const UI = (() => {
       if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && /[\p{L}\p{N}!^=]/u.test(e.key)) { e.preventDefault(); openSearch({ initial: e.key }); }
     });
   }
+  // ---------------- 차트 분할: 큰 차트 + 오른쪽 작은 차트 1~3개 (각자 종목·봉·지표) ----------------
+  let activePane = 0;
+  function renderSplit() {
+    const n = Math.max(0, Math.min(3, ST.split | 0)), box = $('split');
+    document.body.classList.toggle('split-on', n > 0);
+    while (box.children.length > n) box.lastChild.remove();
+    for (let i = box.children.length + 1; i <= n; i++) { const f = document.createElement('iframe'); f.src = location.pathname + '?pane=' + i; f.dataset.pane = i; f.title = '차트 ' + (i + 1); box.appendChild(f); }
+    if (activePane > n) setActivePane(0);
+  }
+  function setActivePane(i) {
+    activePane = i;
+    document.querySelectorAll('#split iframe').forEach(f => f.classList.toggle('act', +f.dataset.pane === i));
+    document.querySelector('.chartWrap').classList.toggle('act', i === 0 && (ST.split | 0) > 0);
+  }
+  function bindSplit() {
+    const ICON = n => `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="14" height="12" rx="1.5"/>${n >= 1 ? '<path d="M10 3v12"/>' : ''}${n === 2 ? '<path d="M10 9h6"/>' : ''}${n === 3 ? '<path d="M10 7h6M10 11h6"/>' : ''}</svg>`;
+    const paint = () => { $('splitBtn').innerHTML = ICON(ST.split | 0); $('splitBtn').classList.toggle('on', (ST.split | 0) > 0); };
+    const set = n => { ST.split = n; save(); renderSplit(); setActivePane(0); paint(); };
+    $('splitBtn').onclick = e => showMenu(e.currentTarget, [
+      ['차트 1개', () => set(0), { check: !(ST.split | 0) }],
+      ['차트 2개 (좌우)', () => set(1), { check: ST.split === 1 }],
+      ['차트 3개 (큰 차트 + 오른쪽 2개)', () => set(2), { check: ST.split === 2 }],
+      ['차트 4개 (큰 차트 + 오른쪽 3개)', () => set(3), { check: ST.split === 3 }],
+    ]);
+    addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.mc === 'focus') setActivePane(e.data.pane); });
+    document.querySelector('.chartWrap').addEventListener('pointerdown', () => activePane && setActivePane(0), true);
+    paint(); renderSplit(); setActivePane(0);
+  }
+  // 관심목록에서 고른 종목은 지금 선택된 차트(파란 테두리)에 열림
+  function openInActive(key, opt) {
+    const f = activePane && document.querySelector(`#split iframe[data-pane="${activePane}"]`);
+    if (f && f.contentWindow) { f.contentWindow.postMessage({ mc: 'open', key }, location.origin); return; }
+    openChart(key, null, opt);
+  }
+
   async function boot() {
     applyTheme(); bindTop(); bindList(); bindKeys(); renderWlSel(); setView(ST.view === 'chart' ? 'chart' : ST.view);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => ST.theme === 'system' && CH.rethemed());
@@ -4456,6 +4528,14 @@ const UI = (() => {
     DS.loadCoinbase().catch(() => {});
     try { await DS.loadBinance(); }
     catch (e) { toast('바이낸스 접속 실패: 인터넷·VPN·방화벽을 확인하세요', 6000); }
+    if (PANE) {   // 작은 차트: 관심목록·시세 줄 없이 차트만
+      document.body.classList.add('pane');
+      if (DS.srv.ok == null) await DS.ping();
+      openChart(ST.key);
+      document.addEventListener('pointerdown', () => parent.postMessage({ mc: 'focus', pane: +PANE }, location.origin), true);
+      addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.mc === 'open') openChart(e.data.key); });
+      return;
+    }
     renderList();
     try { Object.assign(px, await DS.binanceTickers()); paintPrices(); } catch {}
     DS.streamTickers(u => { Object.assign(px, u); paintPrices(); });
@@ -4463,6 +4543,7 @@ const UI = (() => {
     paintSrv();
     openChart(ST.key);
     if (ST.view !== 'chart') setView(ST.view);
+    bindSplit();
     pollYahoo(); pollOther();
     if (typeof SCAN !== 'undefined') SCAN.init();
     if (typeof DISC !== 'undefined') DISC.init();
