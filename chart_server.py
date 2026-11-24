@@ -37,6 +37,7 @@ log = logging.getLogger("mychart")
 
 SYM_RE = re.compile(r"^[A-Za-z0-9.\-=^_&]{1,24}$")
 DAY_MS = 86_400_000
+SERVER_VERSION = "2026-11-24b"  # 마지막 거래일 보정
 
 # tf: (야후 interval, 전체 기간, 최근 기간, 합치기(kind, n))
 TF = {
@@ -167,6 +168,59 @@ def regroup(rows, kind, n):
     return [tuple(groups[k]) for k in order]
 
 
+def day_from_intraday(rows):
+    """1시간봉 목록 → 마지막 거래일의 일봉 (날짜, o, h, l, c, v)"""
+    if not rows:
+        return None
+    day = rows[-1][1]
+    r = [x for x in rows if x[1] == day]
+    return (day, r[0][2], max(x[3] for x in r), min(x[4] for x in r), r[-1][5], sum(x[6] for x in r))
+
+
+def intraday_last(symbols):
+    """야후 일봉에는 마지막 거래일 봉이 한참 늦게 들어올 때가 있음(예: 월요일 장 마감 뒤에도 금요일 봉이 마지막).
+    1시간봉으로 마지막 거래일 시세를 따로 확인해 채움. 실패하면 빈 값(일봉만 사용)."""
+    def load():
+        df = yf().download(symbols, period="5d", interval="60m", group_by="ticker", auto_adjust=False,
+                           progress=False, threads=True, prepost=False)
+        out = {}
+        for s in symbols:
+            f = frame_for(df, s)
+            d = day_from_intraday(df_rows(f, False)) if f is not None else None
+            if d:
+                out[s] = d
+        return out
+    try:
+        return cache.get(("i", tuple(symbols)), 45, load)
+    except Exception as e:
+        log.warning("intraday check failed: %s", e)
+        return {}
+
+
+def day_ms(day):
+    y, m, d = map(int, day.split("-"))
+    return int(datetime(y, m, d, tzinfo=timezone.utc).timestamp() * 1000)
+
+
+def patch_daily(rows, last, interval):
+    """일봉·주봉·월봉 rows 끝에 1시간봉으로 만든 마지막 거래일을 반영"""
+    if not last or not rows:
+        return rows
+    day, o, h, l, c, v = last
+    if day < rows[-1][1]:
+        return rows
+    t, prev = day_ms(day), rows[-1]
+    same = (day == prev[1] if interval == "1d" else
+            t < prev[0] + 7 * DAY_MS if interval == "1wk" else day[:7] == prev[1][:7])
+    if same:
+        if interval == "1d":
+            return rows  # 일봉에 이미 있음 → 그대로
+        rows[-1] = (prev[0], prev[1], prev[2], max(prev[3], h), min(prev[4], l), c, prev[6] + (v if day > prev[1] else 0))
+    else:
+        rows.append((t, day, o, h, l, c, v))
+    return rows
+
+
 def to_klines(rows, tf):
     step = TF_MS[tf]
     out = []
@@ -186,6 +240,12 @@ def yahoo_klines(symbol, tf, recent=False):
         t = yf().Ticker(symbol)
         df = t.history(period=period, interval=interval, auto_adjust=False, actions=False, prepost=False)
         rows = df_rows(df, interval in DAILY)
+        if interval in DAILY and rows:
+            try:
+                rows = patch_daily(rows, day_from_intraday(df_rows(
+                    t.history(period="5d", interval="60m", auto_adjust=False, actions=False, prepost=False), False)), interval)
+            except Exception as e:
+                log.warning("%s intraday patch failed: %s", symbol, e)
         if grp:
             rows = regroup(rows, *grp)
             if recent and len(rows) > 1:
@@ -226,13 +286,15 @@ def download(symbols, period):
 def quotes(symbols):
     def load():
         df = download(symbols, "5d")
+        live = intraday_last(symbols)
         out = {}
         for s in symbols:
             f = frame_for(df, s)
-            if f is None:
-                continue
-            c = [num(x) for x in f["Close"].tolist()] if "Close" in f else []
-            c = [x for x in c if x is not None]
+            rows = df_rows(f, True) if f is not None else []
+            d = live.get(s)
+            if d and (not rows or d[0] > rows[-1][1]):  # 일봉에 아직 없는 마지막 거래일
+                rows = rows + [(day_ms(d[0]), d[0], d[1], d[2], d[3], d[4], d[5])]
+            c = [r[5] for r in rows]
             if not c:
                 continue
             prev = c[-2] if len(c) > 1 else None
@@ -281,15 +343,21 @@ def trend_stats(closes, vols, ann=252):
 def trend(symbols):
     def load():
         df = download(symbols, "1y")
+        live = intraday_last(symbols)
         out = {}
         for s in symbols:
             f = frame_for(df, s)
             if f is None or "Close" not in f:
                 continue
             f = f.dropna(subset=["Close"])
-            st = trend_stats([num(x) for x in f["Close"].tolist()], [num(x) for x in f["Volume"].tolist()] if "Volume" in f else [])
+            cl = [num(x) for x in f["Close"].tolist()]
+            vo = [num(x) for x in f["Volume"].tolist()] if "Volume" in f else []
+            d = live.get(s)
+            if d and len(f) and d[0] > f.index[-1].date().isoformat():
+                cl.append(d[4]); vo.append(d[5])
+            st = trend_stats(cl, vo)
             if st:
-                st["turnover"] = st["price"] * (num(f["Volume"].iloc[-1]) or 0) if "Volume" in f and len(f) else None
+                st["turnover"] = st["price"] * (vo[-1] or 0) if vo else None
                 out[s] = st
         return out
     return cache.get(("t", tuple(symbols)), 900, load)
@@ -480,8 +548,8 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     ver = yf().__version__
                 except Exception as e:
-                    return self.send(200, {"ok": True, "yfinance": None, "warn": str(e)})
-                return self.send(200, {"ok": True, "yfinance": ver})
+                    return self.send(200, {"ok": True, "yfinance": None, "warn": str(e), "version": SERVER_VERSION})
+                return self.send(200, {"ok": True, "yfinance": ver, "version": SERVER_VERSION})
             if p == "/api/open-tv":
                 # 트레이딩뷰 링크를 운영체제로 열기 → 윈도우에서 트레이딩뷰 데스크톱 앱이 tradingview.com 링크를 맡고 있으면 앱으로 열림
                 url = arg("url")

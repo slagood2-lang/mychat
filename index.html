@@ -1687,11 +1687,12 @@ const DS = (() => {
     ? (srv.enabled ? '내 PC 서버에 연결하지 못했습니다. PC에서 start_chart.bat을 켜 두고, 크롬이 이 기기·로컬 네트워크 접근을 물으면 허용하세요.'
                    : '주식·선물·지수는 PC 서버가 필요합니다. PC에서 start_chart.bat을 켠 뒤 상단 ⋯ → 「PC 서버 연결」을 누르세요. (휴대폰에서는 코인만 볼 수 있습니다)')
     : '내 PC 서버가 꺼져 있습니다. start_chart.bat(맥: start_chart.command)을 실행한 뒤 다시 시도하세요.';
+  const NEED_SERVER = '2026-11-24b'; // 이보다 옛 PC 서버는 미국 주식 마지막 거래일이 빠질 수 있음
   async function ping() {
     if (!srv.enabled) { srv.ok = false; return srv; }
     try {
       const r = await sfetch(SERVER + '/api/ping', { cache: 'no-store' });
-      const j = await r.json(); srv.ok = true; srv.yf = j.yfinance; srv.warn = j.warn || null;
+      const j = await r.json(); srv.ok = true; srv.yf = j.yfinance; srv.warn = j.warn || null; srv.version = j.version || null; srv.old = !j.version || j.version < NEED_SERVER;
     } catch { srv.ok = false; }
     return srv;
   }
@@ -4345,7 +4346,8 @@ const UI = (() => {
     const off = d.querySelector('#srvOff');
     if (off) off.onclick = () => { DS.setLocalEnabled(false); paintSrv(); d.close(); toast('PC 서버 연결을 껐습니다 (코인 모드)'); };
   }
-  async function watchServer() { await DS.ping(); paintSrv(); setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
+  let oldWarned = false;
+  async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast('PC 프로그램이 옛 버전입니다 → 새 「나만의차트-PC프로그램」의 설치하기.bat을 한 번 실행하세요 (미국 주식 시세가 하루 늦게 보일 수 있음)', 12000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
   function applyTheme() {
     if (ST.theme === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', ST.theme);
   }
