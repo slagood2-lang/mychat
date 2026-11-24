@@ -459,7 +459,17 @@ class Handler(BaseHTTPRequestHandler):
         p = u.path
         try:
             if p in ("/", "/index.html"):
+                # 화면은 항상 최신 홈페이지에서 (이 PC에 있는 예전 화면은 /old)
+                html = ('<!doctype html><meta charset="utf-8"><title>나만의 차트</title>'
+                        '<meta http-equiv="refresh" content="1;url=https://slagood2-lang.github.io/mychat/">'
+                        '<body style="background:#131722;color:#d1d4dc;font:15px sans-serif;padding:40px">'
+                        '<p>나만의 차트 최신 화면으로 이동합니다… <a style="color:#5b8bff" href="https://slagood2-lang.github.io/mychat/">바로 열기</a></p>'
+                        '<p style="color:#787b86;font-size:13px">이 PC 서버(localhost:8000)는 데이터만 넘겨 줍니다. 예전 화면이 필요하면 <a style="color:#787b86" href="/old">/old</a></p>')
+                return self.send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            if p == "/old":
                 path = os.path.join(HERE, "index.html")
+                if not os.path.exists(path):
+                    return self.send(404, {"error": "이 PC에 예전 화면 파일이 없습니다"})
                 with open(path, "rb") as f:
                     return self.send(200, f.read(), "text/html; charset=utf-8")
             if not p.startswith("/api/"):

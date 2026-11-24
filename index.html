@@ -363,6 +363,16 @@ body.pane{overflow:hidden!important}
 body.pane .app{height:100%!important;min-height:0!important}
 body.pane .main{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
 body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
+
+.lg-main .live .stale{color:#f0b429;font-weight:600}
+
+.list .row.sel{background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.list .row .favst{color:#f0b429;font-style:normal;margin-right:3px;font-size:11px}
+.droplists{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.35);padding:6px;min-width:220px;max-height:70vh;overflow:auto}
+.droplists[hidden]{display:none}
+.droplists .dl-h{font-size:11px;color:var(--muted);padding:4px 8px 6px}
+.droplists .dl{padding:9px 10px;border:1px dashed var(--line);border-radius:6px;margin:4px 0;font-size:13px}
+.droplists .dl.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent)}
 </style>
 </head>
 <body data-view="chart">
@@ -2030,7 +2040,8 @@ const DS = (() => {
     `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}&price_change_percentage=24h,7d,30d`);
   const cgTrending = () => cg('/api/cg/trending', 'https://api.coingecko.com/api/v3/search/trending');
 
-  return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, bx, parseKey, label, nameOf, sourceLabel, names, meta,
+  function reconnect() { for (const f of wakeSubs) try { f(); } catch {} }
+  return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
     resolveSync, resolve, search, localSearch, klines, cachedKlines, recent, streamKline, streamTickers, binanceTickers, yahooQuotes,
     cgMarkets, cgTrending, KR_NAMES };
 })();
@@ -2162,7 +2173,7 @@ const CH = (() => {
   // 도구: n = 찍는 점 수 (0 = 붓, -1 = 점을 계속 찍고 두 번 클릭·Enter로 끝)
   const TOOL_N = { trend: 2, ray: 2, ext: 2, arrow: 2, hline: 1, hray: 1, vline: 1, cross: 1, channel: 3, angle: 2, info: 2, regression: 2, cycles: 2,
     fib: 2, fibext: 3, fibchannel: 3, fibtime: 2, pitchfork: 3, rect: 2, ellipse: 2, triangle: 3, path: -1, brush: 0, text: 1, callout: 2, pricelabel: 1,
-    measure: 2, daterange: 2, dpr: 2, long: 2, short: 2, vwap: 1, elliott5: 6, elliott3: 4, abcd: 4, xabcd: 5, hs: 7 };
+    measure: 2, daterange: 2, dpr: 2, long: 2, short: 2, vwap: 1, highlighter: 0, eraser: 1, image: 2, elliott5: 6, elliott3: 4, abcd: 4, xabcd: 5, hs: 7 };
   const POLY = { path: [], triangle: [], elliott5: ['0', '1', '2', '3', '4', '5'], elliott3: ['0', 'A', 'B', 'C'], abcd: ['A', 'B', 'C', 'D'],
     xabcd: ['X', 'A', 'B', 'C', 'D'], hs: ['', 'LS', '', 'H', '', 'RS', ''] };
   const TEXT_TYPES = new Set(['text', 'callout']);
@@ -2193,7 +2204,7 @@ const CH = (() => {
         ctx.save();
         ctx.lineWidth = (d.style.w || 1) + (hov && !sel ? 1 : 0);
         ctx.setLineDash(d.style.dash ? [6, 4] : []);
-        try { paint(ctx, d, g, sz, ser); } catch (e) { console.warn('draw', d.type, e); }
+        try { paint(ctx, d, g, sz, ser); lineText(ctx, d, g); } catch (e) { console.warn('draw', d.type, e); }
         ctx.restore();
         if (sel && !draw.locked) for (const [x, y] of g.handles) {
           ctx.fillStyle = css('--bg'); ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2; ctx.setLineDash([]);
@@ -2214,7 +2225,8 @@ const CH = (() => {
       case 'hline': g.segs.push([0, A[1], W, A[1]]); break;
       case 'hray': g.segs.push([A[0], A[1], W, A[1]]); break;
       case 'vline': g.segs.push([A[0], 0, A[0], H]); break;
-      case 'trend': case 'arrow': g.segs.push([A[0], A[1], B[0], B[1]]); break;
+      case 'trend': { const a = d.style.extL ? farPt(B, A) : A, b = d.style.extR ? farPt(A, B) : B; g.segs.push([a[0], a[1], b[0], b[1]]); break; }
+      case 'arrow': g.segs.push([A[0], A[1], B[0], B[1]]); break;
       case 'ray': { const f = farPt(A, B); g.segs.push([A[0], A[1], f[0], f[1]]); break; }
       case 'ext': { const f = farPt(A, B), r = farPt(B, A); g.segs.push([r[0], r[1], f[0], f[1]]); break; }
       case 'channel': case 'fibchannel': {
@@ -2230,7 +2242,7 @@ const CH = (() => {
         g.dir = dir; break;
       }
       case 'fib': case 'fibext': case 'fibtime': g.segs.push([A[0], A[1], B[0], B[1]]); if (C) g.segs.push([B[0], B[1], C[0], C[1]]); break;
-      case 'rect': case 'ellipse': case 'measure': case 'daterange': case 'dpr':
+      case 'rect': case 'ellipse': case 'measure': case 'daterange': case 'dpr': case 'image':
         g.boxes.push([Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.max(A[0], B[0]), Math.max(A[1], B[1])]); break;
       case 'long': case 'short': {
         const stop = d.p[2] ? d.p[2].p : d.p[0].p - (d.p[1].p - d.p[0].p), yS = yIn(ser, stop);
@@ -2238,7 +2250,7 @@ const CH = (() => {
         g.boxes.push([Math.min(A[0], B[0]), Math.min(A[1], B[1], yS), Math.max(A[0], B[0]), Math.max(A[1], B[1], yS)]);
         g.handles = [A, [B[0], B[1]], [B[0], yS]]; break;
       }
-      case 'brush': for (let i = 1; i < P.length; i++) g.segs.push([P[i - 1][0], P[i - 1][1], P[i][0], P[i][1]]); g.handles = []; break;
+      case 'brush': case 'highlighter': for (let i = 1; i < P.length; i++) g.segs.push([P[i - 1][0], P[i - 1][1], P[i][0], P[i][1]]); g.handles = []; break;
       case 'cross': g.segs.push([0, A[1], W, A[1]], [A[0], 0, A[0], H]); break;
       case 'angle': case 'info': g.segs.push([A[0], A[1], B[0], B[1]]); break;
       case 'cycles': {
@@ -2295,7 +2307,7 @@ const CH = (() => {
       }
       case 'text': {
         let w = 60; try { const c = document.createElement('canvas').getContext('2d'); c.font = `600 ${d.style.size || 14}px sans-serif`; w = c.measureText(d.text || '텍스트').width; } catch {}
-        g.boxes.push([A[0] - 4, A[1] - 12, A[0] + w + 4, A[1] + 12]); break;
+        const hh = (d.style.size || 14) / 2 + 4; g.boxes.push([A[0] - 4, A[1] - hh, A[0] + w + 4, A[1] + hh]); break;
       }
     }
     // 피보 레벨 (되돌림·확장): 가격
@@ -2314,12 +2326,25 @@ const CH = (() => {
     }
     if (d.type === 'fibtime') {
       const L0 = logicalOf(d.p[0].t), L1 = logicalOf((d.p[1] || d.p[0]).t), step = L1 - L0;
-      g.times = step ? FIBTIME.map(k => ({ k, x: xOf(L0 + k * step) })).filter(o => o.x != null && o.x >= -5 && o.x <= W + 5) : [];
+      g.times = step ? (Array.isArray(d.seq) && d.seq.length ? d.seq : FIBTIME).map(k => ({ k, x: xOf(L0 + k * step) })).filter(o => o.x != null && o.x >= -5 && o.x <= W + 5) : [];
       for (const o of g.times) g.segs.push([o.x, 0, o.x, H]);
     }
     if (d.type === 'fibchannel') {
+      // 채널 폭을 가격으로 계산: 로그 기준이면 퍼센트 폭, 아니면 가격 폭 (화면 스케일과 상관없이)
+      const lg = d.fib.log ?? true, q = d.p, ok = lg ? q.every(v => v.p > 0) : true;
+      const V = v => lg && ok ? Math.log(v) : v, Pv = v => lg && ok ? Math.exp(v) : v;
+      const La = logicalOf(q[0].t), Lb = logicalOf((q[1] || q[0]).t), Lc = logicalOf((q[2] || q[1] || q[0]).t);
+      const va = V(q[0].p), vb = V((q[1] || q[0]).p), base = L => Lb === La ? va : va + (vb - va) * (L - La) / (Lb - La);
+      const off = q[2] ? V(q[2].p) - base(Lc) : 0;
       g.levels = d.fib.levels.filter(l => l.on).map(l => ({ r: l.r, color: l.color }));
-      g.segs = g.levels.map(l => { const f1 = farPt(B, A, d.fib.extend ? 40 : 0), f2 = farPt(A, B, d.fib.extend ? 40 : 0); return [d.fib.extend ? f1[0] : A[0], (d.fib.extend ? f1[1] : A[1]) + g.off * l.r, d.fib.extend ? f2[0] : B[0], (d.fib.extend ? f2[1] : B[1]) + g.off * l.r]; });
+      g.segs = []; g.lab = [];
+      for (const l of g.levels) {
+        const y1 = yIn(ser, Pv(va + l.r * off)), y2 = yIn(ser, Pv(vb + l.r * off));
+        if (y1 == null || y2 == null) { g.segs.push([0, -1e6, 0, -1e6]); g.lab.push(null); continue; }
+        let a = [A[0], y1], b = [B[0], y2];
+        if (d.fib.extend) { const f1 = farPt(b, a), f2 = farPt(a, b); a = f1; b = f2; }
+        g.segs.push([a[0], a[1], b[0], b[1]]); g.lab.push([A[0], y1]);
+      }
     }
     return g;
   }
@@ -2334,6 +2359,21 @@ const CH = (() => {
     ctx.beginPath(); ctx.moveTo(b[0], b[1]);
     ctx.lineTo(b[0] - size * Math.cos(ang - 0.4), b[1] - size * Math.sin(ang - 0.4));
     ctx.lineTo(b[0] - size * Math.cos(ang + 0.4), b[1] - size * Math.sin(ang + 0.4)); ctx.closePath(); ctx.fill();
+  }
+  // 붙여 넣은 그림 (데이터 URL) 캐시
+  const imgCache = new Map();
+  function imgOf(d) { let im = imgCache.get(d.id); if (!im || im.src !== d.img) { im = new Image(); im.onload = () => drawPrim.update(); im.src = d.img || ''; imgCache.set(d.id, im); } return im; }
+  // 선·도형 위 글자 (트레이딩뷰처럼 선에 이름 달기)
+  const LABELED = new Set(['trend', 'ray', 'ext', 'arrow', 'hline', 'hray', 'vline', 'channel', 'rect', 'ellipse', 'triangle', 'path', 'fib', 'fibext', 'fibchannel', 'fibtime', 'pitchfork', 'cross']);
+  function lineText(ctx, d, g) {
+    if (!d.text || !LABELED.has(d.type)) return;
+    const s = g.segs[0], b = g.boxes[0]; let x, y, ang = 0;
+    if (b) { x = (b[0] + b[2]) / 2; y = b[1] - 6; }
+    else if (s) { x = (s[0] + s[2]) / 2; y = (s[1] + s[3]) / 2 - 6; if (d.type !== 'hline' && d.type !== 'hray' && d.type !== 'vline') ang = Math.atan2(s[3] - s[1], s[2] - s[0]); if (d.type === 'hline') x = 60; }
+    else return;
+    if (Math.abs(ang) > Math.PI / 2) ang += Math.PI;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.font = `600 ${d.style.size || 12}px ` + css('--f-body');
+    ctx.fillStyle = d.style.color || css('--draw'); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(d.text, 0, 0); ctx.restore();
   }
   function paint(ctx, d, g, sz, ser) {
     const col = d.style.color || css('--draw'), P = g.handles;
@@ -2359,7 +2399,7 @@ const CH = (() => {
         break;
       }
       case 'fibchannel':
-        g.segs.forEach((s, i) => { ctx.strokeStyle = g.levels[i].color; line(s); if (d.fib.labels) { ctx.fillStyle = g.levels[i].color; ctx.font = '11px ' + css('--f-mono'); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(String(g.levels[i].r), P[0][0] - 6, P[0][1] + g.off * g.levels[i].r); } });
+        g.segs.forEach((s, i) => { if (!g.lab[i]) return; ctx.strokeStyle = g.levels[i].color; line(s); if (d.fib.labels) { ctx.fillStyle = g.levels[i].color; ctx.font = '11px ' + css('--f-mono'); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(String(g.levels[i].r), g.lab[i][0] - 6, g.lab[i][1]); } });
         break;
       case 'fib': case 'fibext':
         ctx.save(); ctx.strokeStyle = css('--muted'); ctx.setLineDash([4, 4]); line([P[0][0], P[0][1], (P[1] || P[0])[0], (P[1] || P[0])[1]]); if (P[2]) line([P[1][0], P[1][1], P[2][0], P[2][1]]); ctx.restore();
@@ -2368,19 +2408,28 @@ const CH = (() => {
         break;
       case 'fibtime':
         ctx.font = '11px ' + css('--f-mono'); ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        for (const o of g.times) { line([o.x, 0, o.x, sz.height]); ctx.fillText(String(o.k), o.x + 3, 4); }
+        for (const o of g.times) { line([o.x, 0, o.x, sz.height]); if (d.style.labels !== false) ctx.fillText(String(o.k), o.x + 3, 4); }
         break;
       case 'pitchfork':
         g.segs.forEach((s, i) => { ctx.strokeStyle = i === 0 ? '#f23645' : i === 3 ? css('--muted') : col; line(s); });
         break;
       case 'rect': case 'ellipse': {
         const [x0, y0, x1, y1] = g.boxes[0];
-        ctx.save(); ctx.fillStyle = alpha(col, 0.12);
+        ctx.save(); ctx.fillStyle = alpha(col, (d.style.fillA ?? 12) / 100);
         if (d.type === 'rect') { ctx.fillRect(x0, y0, x1 - x0, y1 - y0); ctx.restore(); ctx.strokeRect(x0, y0, x1 - x0, y1 - y0); }
         else { ctx.beginPath(); ctx.ellipse((x0 + x1) / 2, (y0 + y1) / 2, Math.max(1, (x1 - x0) / 2), Math.max(1, (y1 - y0) / 2), 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); ctx.beginPath(); ctx.ellipse((x0 + x1) / 2, (y0 + y1) / 2, Math.max(1, (x1 - x0) / 2), Math.max(1, (y1 - y0) / 2), 0, 0, Math.PI * 2); ctx.stroke(); }
         break;
       }
-      case 'brush': ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); proj(d, ser).forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); break;
+      case 'brush': case 'highlighter':
+        if (d.type === 'highlighter') { ctx.globalAlpha = 0.35; ctx.lineWidth = Math.max(8, (d.style.w || 1) * 6); }
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); proj(d, ser).forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); break;
+      case 'image': {
+        const [x0, y0, x1, y1] = g.boxes[0], im = imgOf(d);
+        if (im.complete && im.naturalWidth) ctx.drawImage(im, x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+        else { ctx.strokeStyle = css('--muted'); ctx.strokeRect(x0, y0, x1 - x0, y1 - y0); }
+        if (d === draw.sel) { ctx.strokeStyle = css('--accent'); ctx.setLineDash([4, 3]); ctx.strokeRect(x0, y0, x1 - x0, y1 - y0); }
+        break;
+      }
       case 'text': ctx.font = `600 ${d.style.size || 14}px ` + css('--f-body'); ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(d.text || '텍스트', P[0][0], P[0][1]); break;
       case 'measure': case 'daterange': case 'dpr': {
         const [x0, y0, x1, y1] = g.boxes[0], q0 = d.p[0], q1 = d.p[1] || d.p[0];
@@ -2515,7 +2564,7 @@ const CH = (() => {
   const drawKey = () => 'mc.d.' + S.key;
   // 되돌리기 (Ctrl+Z) · 다시 하기 (Ctrl+Y): 저장할 때마다 이전 상태를 쌓음
   const hist = { undo: [], redo: [], last: '[]' };
-  const snap = () => JSON.stringify(draw.list.map(({ id, type, pane, p, style, fib, text }) => ({ id, type, pane, p, style, fib, text })));
+  const snap = () => JSON.stringify(draw.list.map(({ id, type, pane, p, style, fib, text, seq, img }) => ({ id, type, pane, p, style, fib, text, seq, img })));
   function saveDrawings(fromHist) {
     const now = snap();
     if (!fromHist && now !== hist.last) { hist.undo.push(hist.last); if (hist.undo.length > 100) hist.undo.shift(); hist.redo = []; }
@@ -2541,7 +2590,10 @@ const CH = (() => {
     const base = { id: Math.random().toString(36).slice(2, 9), type, pane, p: [pt], style: { color: css('--draw'), w: FIB_TYPES.has(type) || type === 'fibtime' ? 1 : 2, dash: false } };
     if (type === 'fib') base.fib = JSON.parse(JSON.stringify(fibTemplate));
     if (type === 'fibext') base.fib = { ...JSON.parse(JSON.stringify(fibTemplate)), levels: JSON.parse(JSON.stringify(FIBEXT_LEVELS)), log: false };
-    if (type === 'fibchannel') base.fib = { ...JSON.parse(JSON.stringify(fibTemplate)), levels: JSON.parse(JSON.stringify(FIBCH_LEVELS)), extend: false };
+    if (type === 'fibchannel') base.fib = { ...JSON.parse(JSON.stringify(fibTemplate)), levels: JSON.parse(JSON.stringify(FIBCH_LEVELS)), extend: false, log: true };
+    if (type === 'fibtime') base.seq = FIBTIME.slice();
+    if (type === 'highlighter') { base.style.color = '#f0b429'; base.style.w = 3; }
+    if (type === 'brush') base.style.w = 2;
     if (type === 'hline' || type === 'hray') base.style.color = css('--accent');
     if (['measure', 'daterange', 'dpr', 'long', 'short'].includes(type)) base.style.w = 1;
     if (type === 'pitchfork') base.style.color = '#089981';
@@ -2581,11 +2633,13 @@ const CH = (() => {
     add('main', candle, 0);
     for (const h of handles) if (h.pane && h.inst) { const ps = chart.panes()[h.pane]; const s = ps && ps.getSeries()[0]; if (s && !panePrims.has(h.inst.id)) add(h.inst.id, s, h.pane); }
   }
+  const STICKY = new Set(['brush', 'highlighter']);
   function finish(d) {
     draw.creating = null; draw.brushing = false;
     if (d.type === 'long' || d.type === 'short') d.p[2] = { t: d.p[1].t, p: d.p[0].p - (d.p[1].p - d.p[0].p) };
     if (d.type === 'callout') draw.pendingText = d;
     draw.list.push(d); draw.sel = d; saveDrawings();
+    if (STICKY.has(d.type)) { drawPrim.update(); return; }   // 붓·형광펜은 Esc 전까지 계속 그림
     S.tool = 'cursor'; box.style.cursor = ''; legend && legend.classList.remove('through'); drawPrim.update(); onChange('tool');
   }
   function bindPointer() {
@@ -2595,6 +2649,11 @@ const CH = (() => {
       if (S.tool !== 'cursor') {
         e.stopPropagation(); e.preventDefault();
         const n = TOOL_N[S.tool] ?? 2;
+        if (S.tool === 'eraser') {   // 지우개: 누른 그림 지우기 (끌면서 여러 개)
+          draw.erasing = true; box.setPointerCapture?.(e.pointerId); freezeChart(true);
+          if (pa && pa.key) { const h = hit(pa.key, x, pa.y, pa.W, pa.H); if (h) { draw.list = draw.list.filter(q => q !== h.d); saveDrawings(); drawPrim.update(); } }
+          return;
+        }
         if (!draw.creating) {
           if (!pa || pa.scale || !pa.key) return;
           const pt = pointAt(x, pa.y, pa.key); if (!pt) return;
@@ -2618,6 +2677,7 @@ const CH = (() => {
     box.addEventListener('pointermove', e => {
       if (!chart) return;
       const [x, y] = relXY(e);
+      if (draw.erasing) { const pa = paneAt(x, y); if (pa && pa.key) { const h = hit(pa.key, x, pa.y, pa.W, pa.H); if (h) { draw.list = draw.list.filter(q => q !== h.d); saveDrawings(); drawPrim.update(); } } return; }
       if (draw.creating) {
         const d = draw.creating, pt = pointAt(x, y - paneTop(d.pane), d.pane); if (!pt) return;
         if (draw.brushing) { const last = d.p[d.p.length - 1]; const P = proj({ p: [last, pt] }, serOf(d.pane)); if (P[0] && P[1] && Math.hypot(P[1][0] - P[0][0], P[1][1] - P[0][1]) > 3) d.p.push(pt); }
@@ -2650,6 +2710,7 @@ const CH = (() => {
       drawPrim.update();
     }
     const end = (ev) => {
+      if (draw.erasing) { draw.erasing = false; freezeChart(false); }
       if (draw.creating && !draw.brushing && draw.down && ev && ev.type === 'pointerup') {
         const [x, y] = relXY(ev), far = Math.hypot(x - draw.down[0], y - draw.down[1]) > 8; draw.down = null;
         if (far) advance(x, y);
@@ -2677,6 +2738,17 @@ const CH = (() => {
       UI.chartContext({ x: e.clientX, y: e.clientY, kind: h ? 'drawing' : pa.scale ? 'scale' : 'chart', d: h && h.d, pane: pa.key, paneIndex: pa.index, pt,
         inst: pa.key && pa.key !== 'main' ? layout.find(i => i.id === pa.key) : null });
     }, true);
+  }
+  // 붙여 넣은 그림을 차트 가운데에 놓기 (가격·시간에 붙어 함께 움직임)
+  function addImage(url, w, h) {
+    if (!chart || !D.N) return null;
+    const pa = panePrims.get('main'), el = chart.panes()[0].getHTMLElement().getBoundingClientRect();
+    const W = el.width - (chart.priceScale('right').width() || 0), H = el.height, k = Math.min(1, W * 0.45 / w, H * 0.6 / h);
+    const cx = W / 2, cy = H / 2, ww = w * k, hh = h * k, mg = S.magnet; S.magnet = false;
+    const a = pointAt(cx - ww / 2, cy - hh / 2, 'main'), b = pointAt(cx + ww / 2, cy + hh / 2, 'main'); S.magnet = mg;
+    if (!a || !b) return null;
+    const d = { id: Math.random().toString(36).slice(2, 9), type: 'image', pane: 'main', p: [a, b], style: { color: css('--muted'), w: 1 }, img: url };
+    draw.list.push(d); draw.sel = d; saveDrawings(); drawPrim.update(); return d;
   }
   function addDrawing(type, pt, pane = 'main') { const d = newDrawing(type, pt, pane); finish(d); return d; }
   // 점을 계속 찍는 도구(경로) 끝내기: 두 번 클릭 · Enter
@@ -2740,24 +2812,38 @@ const CH = (() => {
     },
     ma: {
       name: '이동평균 (MA)', desc: '단순 이동평균 · 여러 개 추가 가능', multi: true,
-      inputs: [{ k: 'len', l: '길이', t: 'num', min: 1 }, { k: 'src', l: '소스', t: 'sel', o: SRC_OPTS }, { k: 'color', l: '색', t: 'color' }, { k: 'w', l: '두께', t: 'num', min: 1, max: 4 }],
-      defaults: { len: 450, src: 'close', color: '#f0b429', w: 2 },
+      inputs: [{ k: 'len', l: '길이', t: 'num', min: 1 }, { k: 'src', l: '소스', t: 'sel', o: SRC_OPTS }, { k: 'color', l: '색', t: 'color' }, { k: 'w', l: '두께', t: 'num', min: 1, max: 4 }, { k: 'partial', l: '봉이 모자라면 있는 만큼으로 흐리게 (월봉 등)', t: 'bool' }],
+      defaults: { len: 450, src: 'close', color: '#f0b429', w: 2, partial: true },
       title: i => `MA ${i.p.len}`,
       create(env, inst) {
         const s = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.color, inst.p.w, { lastValueVisible: !!cfg.indLabels })));
         let v = [];
-        return { fill() { v = IND.smaP(srcOf(inst.p.src), inst.p.len); s.setData(line(v)); }, values: i => [{ c: inst.p.color, t: fp(v[i]) }] };
+        let part = 0;
+        return { fill() {
+          const src = srcOf(inst.p.src); v = IND.smaP(src, inst.p.len); part = 0;
+          // 봉이 길이보다 적으면 (월봉 MA450 등) 앞부분을 있는 봉만큼의 평균으로 흐리게 이어 그림
+          if (inst.p.partial !== false) { let sum = 0, n = 0; for (let i = 0; i < v.length; i++) { if (isFinite(v[i])) break; if (!isFinite(src[i])) continue; sum += src[i]; n++; v[i] = sum / n; part = i + 1; } }
+          const fa = alpha(inst.p.color, 0.4);
+          s.setData(v.map((x, i) => isFinite(x) && (cfg.scale !== 'log' || x > 0) ? (i < part ? { time: D.T[i], value: x, color: fa } : { time: D.T[i], value: x }) : { time: D.T[i] }));
+        }, values: i => [{ c: inst.p.color, t: fp(v[i]) + (i < part ? ` (${i + 1}봉 평균)` : '') }] };
       },
     },
     ema: {
       name: '지수이동평균 (EMA)', desc: '트레이딩뷰 ta.ema와 같은 계산 · 여러 개 추가 가능', multi: true,
-      inputs: [{ k: 'len', l: '길이', t: 'num', min: 1 }, { k: 'src', l: '소스', t: 'sel', o: SRC_OPTS }, { k: 'color', l: '색', t: 'color' }, { k: 'w', l: '두께', t: 'num', min: 1, max: 4 }],
-      defaults: { len: 450, src: 'close', color: '#3b82f6', w: 2 },
+      inputs: [{ k: 'len', l: '길이', t: 'num', min: 1 }, { k: 'src', l: '소스', t: 'sel', o: SRC_OPTS }, { k: 'color', l: '색', t: 'color' }, { k: 'w', l: '두께', t: 'num', min: 1, max: 4 }, { k: 'partial', l: '봉이 모자라면 있는 만큼으로 흐리게 (월봉 등)', t: 'bool' }],
+      defaults: { len: 450, src: 'close', color: '#3b82f6', w: 2, partial: true },
       title: i => `EMA ${i.p.len}`,
       create(env, inst) {
         const s = chart.addSeries(LW().LineSeries, ov(lineOpts(inst.p.color, inst.p.w, { lastValueVisible: !!cfg.indLabels })));
         let v = [];
-        return { fill() { v = IND.emaP(srcOf(inst.p.src), inst.p.len); s.setData(line(v)); }, values: i => [{ c: inst.p.color, t: fp(v[i]) }] };
+        let part = 0;
+        return { fill() {
+          const src = srcOf(inst.p.src); v = IND.emaP(src, inst.p.len); part = 0;
+          // 봉이 길이보다 적으면 (월봉 MA450 등) 앞부분을 있는 봉만큼의 평균으로 흐리게 이어 그림
+          if (inst.p.partial !== false) { let sum = 0, n = 0; for (let i = 0; i < v.length; i++) { if (isFinite(v[i])) break; if (!isFinite(src[i])) continue; sum += src[i]; n++; v[i] = sum / n; part = i + 1; } }
+          const fa = alpha(inst.p.color, 0.4);
+          s.setData(v.map((x, i) => isFinite(x) && (cfg.scale !== 'log' || x > 0) ? (i < part ? { time: D.T[i], value: x, color: fa } : { time: D.T[i], value: x }) : { time: D.T[i] }));
+        }, values: i => [{ c: inst.p.color, t: fp(v[i]) + (i < part ? ` (${i + 1}봉 평균)` : '') }] };
       },
     },
     bb: {
@@ -3320,11 +3406,24 @@ const CH = (() => {
     render(false);
     onChange('loaded', key);
     S.stream = DS.streamKline(key, tf, (nb, replace) => { if (gen === S.gen) onLive(nb, replace); });
-    S.status = S.stream.kind; buildLegend();
+    S.status = S.stream.kind; S.lastLive = Date.now(); buildLegend();
   }
   let refillTimer = null;
+  // 시세가 한동안 안 오면 윗줄에 「n분째 새 시세 없음」 표시하고 연결을 다시 확인
+  setInterval(() => {
+    const el = legend && legend.querySelector('.lg-main .live'); if (!el || !S.stream || document.hidden) return;
+    const age = S.lastLive ? (Date.now() - S.lastLive) / 1000 : 0, kind = S.stream.kind;
+    const lim = kind === '실시간' ? 90 : 150;
+    let warn = el.querySelector('.stale');
+    if (age > lim) {
+      if (!warn) { warn = document.createElement('b'); warn.className = 'stale'; el.appendChild(warn); }
+      warn.textContent = ` · ${Math.floor(age / 60) ? Math.floor(age / 60) + '분' : Math.round(age) + '초'}째 새 시세 없음 (장 쉬는 시간이면 정상)`;
+      if (age > lim && (!S.wokeAt || Date.now() - S.wokeAt > 60000)) { S.wokeAt = Date.now(); DS.reconnect && DS.reconnect(); }
+    } else if (warn) warn.remove();
+  }, 5000);
   function onLive(nb, replace) {
     if (!nb || !nb.length) return;
+    S.lastLive = Date.now();
     if (replace) { setBars(nb); setMain(); refill(); onChange('tick'); return; }
     const b = S.bars; let changed = false, appended = false;
     for (const x of nb) {
@@ -3423,7 +3522,7 @@ const CH = (() => {
   function fit() { chart && chart.timeScale().fitContent(); }
 
   return { init, load, render, undo, redo, setLayout, debugOverlay: id => overlay && overlay.layers.get(id), FULL_LAYOUT, DEFAULT_LAYOUT, addDrawing, duplicate, finishCreate, POLY, TOOL_N, toggleIndicator, removeIndicator, autoScale, selectDrawing, FIBEXT_LEVELS, FIBCH_LEVELS, setLog, setScale, setConfig, setRange, setLocked, setHidden, CFG_DEFAULT, get cfg() { return cfg; }, setMagnet, setTool, deleteSelected, clearDrawings, cancelCreate, addIndicator, updateIndicator, resetLayout,
-    rethemed, screenshot, redraw, saveDrawings, saveFibTemplate, goLatest, fit, TYPES, FIB_DEFAULT,
+    rethemed, screenshot, redraw, addImage, saveDrawings, saveFibTemplate, goLatest, fit, TYPES, FIB_DEFAULT,
     get state() { return S; }, get layout() { return layout; }, get drawings() { return draw; }, get chart() { return chart; }, get data() { return D; },
     get fibTemplate() { return fibTemplate; }, refreshScanZones() { for (const h of handles) if (h.inst?.type === 'zones' && h.fill) h.fill(); refreshLegend(); } };
 })();
@@ -3652,7 +3751,8 @@ const UI = (() => {
     const rowHtml = (key, small, third, extra = '') => {
       const alt = key.startsWith('YAHOO:') && DS.srv.ok !== true ? DS.liveAlt(key) : null, pk = alt ? alt.key : key;
       const cur = key === ST.key || pk === ST.key;
-      return `<div class="row${cur ? ' cur' : ''}" data-key="${esc(key)}" data-pk="${esc(pk)}"${extra}><span class="s"><b>${esc(DS.label(key))}${alt ? ' <i class="zap" title="바이낸스 실시간으로 표시">⚡</i>' : ''}</b><small>${esc(alt ? DS.parseKey(alt.key).id + '.P 실시간' : small)}</small></span>
+      const fav = favList() && favList().items.includes(key);
+      return `<div class="row${cur ? ' cur' : ''}${extra.includes('data-i=') && selI.has(+extra.match(/data-i="(\d+)"/)[1]) ? ' sel' : ''}" data-key="${esc(key)}" data-pk="${esc(pk)}"${extra}><span class="s"><b>${fav ? '<i class="favst">★</i>' : ''}${esc(DS.label(key))}${alt ? ' <i class="zap" title="바이낸스 실시간으로 표시">⚡</i>' : ''}</b><small>${esc(alt ? DS.parseKey(alt.key).id + '.P 실시간' : small)}</small></span>
       <span class="num p">${fpx(px[pk]?.price)}</span><span class="num c">${alt ? chgHtml(pk) : third}</span>${ST.sideTab === 'wl' ? '<button class="x" title="목록에서 빼기">×</button>' : ''}</div>`;
     };
     if (ST.sideTab === 'wl') {
@@ -3681,23 +3781,156 @@ const UI = (() => {
       if (ST.sideTab !== 'scan') { row.querySelector('.p').textContent = fpx(q.price); row.querySelector('.c').innerHTML = chgHtml(k); }
     }
   }
+  // ---------------- 관심목록: 여러 개 선택 · 복사 · 붙여넣기 · 다른 목록으로 · 즐겨찾기 ----------------
+  const selI = new Set(); let selAnchor = null, clip = { text: '', keys: [] };
+  const FAV = '★ 즐겨찾기';
+  function favList() { return ST.lists.find(l => l.name === FAV); }
+  function paintSel() { for (const r of $('list').querySelectorAll('.row[data-i]')) r.classList.toggle('sel', selI.has(+r.dataset.i)); }
+  function selKeys() { const L = curList().items; return [...selI].sort((a, b) => a - b).map(i => L[i]).filter(Boolean); }
+  const copyText = keys => keys.map(k => k.startsWith('###') ? k : tvSymbol(k)).join(',');
+  async function copyKeys(keys) {
+    if (!keys.length) return; const t = copyText(keys); clip = { text: t, keys };
+    try { await navigator.clipboard.writeText(t); } catch {}
+    toast(`${keys.filter(k => !k.startsWith('###')).length}개 복사했습니다 (트레이딩뷰에도 붙여 넣을 수 있음)`);
+  }
+  function removeSel() { const L = curList(); const idx = [...selI].sort((a, b) => b - a); for (const i of idx) L.items.splice(i, 1); selI.clear(); save(); renderList(); paintStar(); toast(`${idx.length}개 뺐습니다`); }
+  // 붙여넣기: 트레이딩뷰 목록 · 쉼표/줄바꿈/띄어쓰기로 나눈 종목 이름 모두 됨. 선택한 줄 아래에 넣음
+  async function pasteSymbols(text, into = curList()) {
+    let keys;
+    if (text === clip.text) keys = clip.keys.slice();
+    else {
+      const toks = text.split(/[,\n\r\t]+/).map(x => x.trim()).filter(Boolean).flatMap(x => x.startsWith('###') || !/\s/.test(x) || /^[가-힣A-Za-z0-9 &.]+$/.test(x) && DS.localSearch(x).length ? [x] : x.split(/\s+/));
+      const r = await parseTv(toks.join(',')); keys = r.out; if (r.bad.length) toast(`못 찾음: ${r.bad.slice(0, 5).join(', ')}${r.bad.length > 5 ? ' …' : ''}`, 5000);
+    }
+    const L = into, have = new Set(L.items), add = keys.filter(k => k.startsWith('###') || !have.has(k));
+    if (!add.length) { toast('이미 다 들어 있습니다'); return; }
+    const at = into === curList() && selI.size ? Math.max(...selI) + 1 : L.items.length;
+    L.items.splice(at, 0, ...add); selI.clear(); if (into === curList()) add.forEach((_, k) => selI.add(at + k));
+    save(); renderWlSel(); renderList(); pollYahoo(); pollOther(); toast(`${add.filter(k => !k.startsWith('###')).length}개 붙여 넣었습니다 → ${L.name}`);
+  }
+  function toFav(keys, on) {
+    let F = favList(); if (!F) { F = { name: FAV, items: [] }; ST.lists.splice(0, 0, F); if (ST.active >= 0) ST.active++; }
+    for (const k of keys) { const i = F.items.indexOf(k); if (on && i < 0) F.items.push(k); if (!on && i >= 0) F.items.splice(i, 1); }
+    save(); renderWlSel(); renderList();
+  }
+  function sendTo(keys, target, move) {
+    const T = ST.lists[target]; if (!T) return; const have = new Set(T.items), add = keys.filter(k => !have.has(k)); T.items.push(...add);
+    if (move) { const L = curList(), set = new Set(keys); L.items = L.items.filter(k => !set.has(k)); selI.clear(); }
+    save(); renderWlSel(); renderList(); paintStar(); toast(`${add.length}개 ${move ? '옮김' : '복사'} → ${T.name}`);
+  }
+  function rowMenu(x, y, key) {
+    const keys = ST.sideTab === 'wl' && selI.size ? selKeys().filter(k => !k.startsWith('###')) : [key];
+    const n = keys.length, others = ST.lists.map((l, i) => [l, i]).filter(([, i]) => ST.sideTab !== 'wl' || i !== ST.active);
+    const allFav = favList() && keys.every(k => favList().items.includes(k));
+    const items = [
+      ['차트 열기', () => openInActive(key, ST.sideTab === 'wl' ? { layout: curList().layout || 'live' } : {})],
+      [allFav ? '★ 즐겨찾기에서 빼기' : '★ 즐겨찾기에 넣기', () => toFav(keys, !allFav)],
+      '-',
+      [`복사${n > 1 ? ` (${n}개)` : ''}`, () => copyKeys(keys), { hint: 'Ctrl+C' }],
+      ...(ST.sideTab === 'wl' ? [['여기 붙여넣기', async () => { let t = ''; try { t = await navigator.clipboard.readText(); } catch {} t ? pasteSymbols(t) : multiPasteDialog(); }, { hint: 'Ctrl+V' }]] : []),
+      '-',
+      ...others.map(([l, i]) => [`다른 목록에 복사 → ${l.name}`, () => sendTo(keys, i, false)]),
+      ...(ST.sideTab === 'wl' ? others.map(([l, i]) => [`다른 목록으로 이동 → ${l.name}`, () => sendTo(keys, i, true)]) : []),
+      ['새 목록으로 만들기', async () => { const nm = await askText('새 목록 이름', '새 목록'); if (nm) newListFrom(nm, keys); }],
+      ...(ST.sideTab === 'wl' ? ['-', ['맨 위로', () => { const L = curList(); const set = new Set(keys); L.items = [...keys, ...L.items.filter(k => !set.has(k))]; selI.clear(); save(); renderList(); }],
+        [`목록에서 빼기${n > 1 ? ` (${n}개)` : ''}`, () => { selI.size ? removeSel() : (curList().items = curList().items.filter(k => k !== key), save(), renderList()); }, { danger: true, hint: 'Delete' }]] : []),
+    ];
+    showMenuAt(x, y, items, n > 1 ? `${n}개 선택` : DS.label(key));
+  }
+  function showDropLists() {
+    let el = $('dropLists'); if (!el) { el = document.createElement('div'); el.id = 'dropLists'; el.className = 'droplists'; document.body.appendChild(el); }
+    el.innerHTML = '<div class="dl-h">다른 목록에 놓기 · Ctrl 누르고 놓으면 복사</div>' + ST.lists.map((l, i) => i === ST.active ? '' : `<div class="dl" data-li="${i}">${esc(l.name)}</div>`).join('');
+    const r = $('list').getBoundingClientRect(); el.style.right = (innerWidth - r.left + 8) + 'px'; el.style.top = r.top + 'px'; el.hidden = false;
+    el.ondragover = e => { const d = e.target.closest('.dl'); if (!d) return; e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey || e.altKey ? 'copy' : 'move'; el.querySelectorAll('.dl').forEach(x => x.classList.toggle('on', x === d)); };
+    el.ondrop = e => { const d = e.target.closest('.dl'); if (!d) return; e.preventDefault(); sendTo(selKeys().filter(k => !k.startsWith('###')), +d.dataset.li, !(e.ctrlKey || e.altKey)); hideDropLists(); };
+  }
+  function hideDropLists() { const el = $('dropLists'); if (el) el.hidden = true; }
+  function multiPasteDialog() {
+    const d = openDlg(`<div class="in"><header>여러 종목 한꺼번에 넣기<button class="ib" data-x>✕</button></header>
+      <div class="body"><div class="dim">쉼표·줄바꿈·띄어쓰기로 나눠 붙여 넣으세요. 트레이딩뷰 목록(BINANCE:BTCUSDT.P,NASDAQ:AAPL), 이름(비트코인 삼성전자 테슬라 금), 코드 모두 됩니다. ###이름 은 구분선.</div>
+      <textarea id="mpText" rows="7" placeholder="BTC, ETH, SOL&#10;삼성전자 SK하이닉스&#10;NASDAQ:AAPL, COMEX:GC1!"></textarea>
+      <label>넣을 목록<select id="mpList">${ST.lists.map((l, i) => `<option value="${i}"${i === ST.active ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label></div>
+      <footer><button class="btn" data-x>닫기</button><button class="btn primary" id="mpGo">넣기</button></footer></div>`);
+    setTimeout(() => d.querySelector('#mpText').focus(), 30);
+    d.querySelector('#mpGo').onclick = async () => { const t = d.querySelector('#mpText').value; if (!t.trim()) return; const L = ST.lists[+d.querySelector('#mpList').value]; d.close(); await pasteSymbols(t, L); };
+  }
+  // 차트에 그림 붙여넣기 (Ctrl+V): 크기를 줄여서 그림 도구로
+  function pasteImage(file) {
+    if (ST.view !== 'chart') setView('chart');
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1000 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      let data = c.toDataURL('image/webp', 0.85); if (!data.startsWith('data:image/webp')) data = c.toDataURL('image/jpeg', 0.85);
+      URL.revokeObjectURL(url);
+      const d = CH.addImage(data, c.width, c.height);
+      toast(d ? '그림을 붙여 넣었습니다 · 끌어서 옮기고 모서리로 크기 조절 · Delete로 지움' : '차트가 준비되면 다시 붙여 넣으세요', 4000);
+    };
+    img.src = url;
+  }
+  // 차트 사진을 클립보드로 복사 (카톡·디스코드에 바로 붙여넣기)
+  async function copyChartImage() {
+    const c = CH.screenshot(); if (!c) return;
+    try { const b = await new Promise(r => c.toBlob(r, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]); toast('차트 사진을 복사했습니다 · 원하는 곳에 Ctrl+V'); }
+    catch { toast('이 브라우저는 사진 복사를 막았습니다 · 사진 저장을 쓰세요'); }
+  }
+
   function bindList() {
     const list = $('list');
     list.addEventListener('click', e => {
-      const ds = e.target.closest('[data-delsec]'); if (ds) { curList().items.splice(+ds.dataset.delsec, 1); save(); renderList(); return; }
+      const ds = e.target.closest('[data-delsec]'); if (ds) { curList().items.splice(+ds.dataset.delsec, 1); selI.clear(); save(); renderList(); return; }
       const row = e.target.closest('.row'); if (!row) return;
-      if (e.target.closest('.x')) { const L = curList(); L.items = L.items.filter(x => x !== row.dataset.key); save(); renderList(); paintStar(); return; }
+      if (e.target.closest('.x')) { const L = curList(); L.items = L.items.filter(x => x !== row.dataset.key); selI.clear(); save(); renderList(); paintStar(); return; }
+      if (ST.sideTab === 'wl' && row.dataset.i != null) {
+        const i = +row.dataset.i;
+        if (e.ctrlKey || e.metaKey) { selI.has(i) ? selI.delete(i) : selI.add(i); selAnchor = i; paintSel(); return; }
+        if (e.shiftKey && selAnchor != null) { selI.clear(); const [a, b] = [Math.min(selAnchor, i), Math.max(selAnchor, i)]; for (let k = a; k <= b; k++) if (!curList().items[k].startsWith('###')) selI.add(k); paintSel(); return; }
+        selI.clear(); selI.add(i); selAnchor = i; paintSel();
+      }
       openInActive(row.dataset.key, ST.sideTab === 'wl' ? { layout: curList().layout || 'live' } : {});
     });
+    list.addEventListener('contextmenu', e => {
+      const row = e.target.closest('.row'); if (!row) return; e.preventDefault();
+      if (ST.sideTab === 'wl' && row.dataset.i != null && !selI.has(+row.dataset.i)) { selI.clear(); selI.add(+row.dataset.i); selAnchor = +row.dataset.i; paintSel(); }
+      rowMenu(e.clientX, e.clientY, row.dataset.key);
+    });
+    // 끌어 옮기기: 같은 목록 안에서 순서, 오른쪽 위에 뜨는 다른 목록 칸에 놓으면 이동 (Ctrl 누르면 복사)
     let dragI = null;
-    list.addEventListener('dragstart', e => { const r = e.target.closest('.row[data-i]'); if (!r) return; dragI = +r.dataset.i; e.dataTransfer.effectAllowed = 'move'; });
+    list.addEventListener('dragstart', e => {
+      const r = e.target.closest('.row[data-i]'); if (!r) return; dragI = +r.dataset.i;
+      if (!selI.has(dragI)) { selI.clear(); selI.add(dragI); paintSel(); }
+      e.dataTransfer.effectAllowed = 'copyMove'; e.dataTransfer.setData('text/plain', copyText(selKeys()));
+      showDropLists();
+    });
     list.addEventListener('dragover', e => { const r = e.target.closest('[data-i],[data-sec]'); if (dragI == null || !r) return; e.preventDefault(); list.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over')); r.classList.add('drag-over'); });
     list.addEventListener('drop', e => {
       const r = e.target.closest('[data-i],[data-sec]'); if (dragI == null || !r) return; e.preventDefault();
-      const to = +(r.dataset.i ?? r.dataset.sec), L = curList().items, [x] = L.splice(dragI, 1); L.splice(to > dragI ? to - 1 : to, 0, x);
-      dragI = null; save(); renderList();
+      const to = +(r.dataset.i ?? r.dataset.sec), L = curList().items, idx = [...selI].sort((a, b) => a - b);
+      const moving = idx.map(i => L[i]); const before = idx.filter(i => i < to).length;
+      for (const i of idx.reverse()) L.splice(i, 1);
+      L.splice(to - before, 0, ...moving);
+      selI.clear(); moving.forEach((_, k) => selI.add(to - before + k));
+      dragI = null; hideDropLists(); save(); renderList();
     });
-    list.addEventListener('dragend', () => { dragI = null; list.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over')); });
+    list.addEventListener('dragend', () => { dragI = null; hideDropLists(); list.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over')); });
+    // 목록이 마우스 아래에 있을 때 Ctrl+C / Ctrl+V / Delete / Ctrl+A
+    let listHot = false;
+    $('list').addEventListener('pointerenter', () => listHot = true); $('list').addEventListener('pointerleave', () => listHot = false);
+    document.addEventListener('keydown', e => {
+      if (!listHot || ST.sideTab !== 'wl' || e.target.closest('input,textarea,select,[contenteditable]') || document.querySelector('dialog[open]')) return;
+      const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+      if (mod && k === 'c' && selI.size) { e.preventDefault(); copyKeys(selKeys()); }
+      else if (mod && k === 'x' && selI.size) { e.preventDefault(); copyKeys(selKeys()); removeSel(); }
+      else if (mod && k === 'a') { e.preventDefault(); selI.clear(); curList().items.forEach((x, i) => !x.startsWith('###') && selI.add(i)); paintSel(); }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && selI.size) { e.preventDefault(); removeSel(); }
+    }, true);
+    document.addEventListener('paste', async e => {
+      if (e.target.closest && e.target.closest('input,textarea,[contenteditable]')) return;
+      const files = [...(e.clipboardData?.items || [])].filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
+      if (files.length) { e.preventDefault(); pasteImage(files[0]); return; }
+      const t = e.clipboardData?.getData('text/plain'); if (!t || !t.trim()) return;
+      if (listHot || ST.sideTab === 'wl' && document.activeElement === document.body && !files.length && /[,\n]|^[A-Z0-9:.!^=\-]+$/i.test(t.trim())) { e.preventDefault(); pasteSymbols(t); }
+    });
     $('sideTabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (!b) return; ST.sideTab = b.dataset.tab; save(); renderList(); pollYahoo(); });
     $('wlSel').addEventListener('change', e => { ST.active = +e.target.value; save(); renderList(); paintStar(); pollYahoo(); });
     $('wlAdd').onclick = () => openSearch({ mode: 'add' });
@@ -3711,16 +3944,66 @@ const UI = (() => {
       }],
       ['이 목록은 「실시간」 레이아웃으로 열기', () => { delete curList().layout; save(); toast('이 목록 종목은 실시간 레이아웃으로 엽니다'); }, { check: !curList().layout }],
       ['이 목록은 「전체 차트」 레이아웃으로 열기', () => { curList().layout = 'full'; save(); toast('이 목록 종목은 전체 차트(주봉·NWE·TD) 레이아웃으로 엽니다'); }, { check: curList().layout === 'full' }],
-      ['전체 차트 목록 다시 만들기 (코인 TOP20 · 미국 주식 TOP20)', () => { let n = 0; for (const l of FULL_LISTS()) { const i = ST.lists.findIndex(x => x.name === l.name); if (i >= 0) ST.lists[i] = l; else ST.lists.push(l); n++; } save(); renderWlSel(); renderList(); toast(`${n}개 목록을 만들었습니다`); }],
+      ['전체 차트 목록 다시 만들기 (코인 TOP20 · 미국 주식 TOP20 · 내가 넣은 종목은 그대로)', () => { let n = 0; for (const l of FULL_LISTS()) { const i = ST.lists.findIndex(x => x.name === l.name); if (i >= 0) ST.lists[i] = mergeList(l, ST.lists[i]); else ST.lists.push(l); n++; } save(); renderWlSel(); renderList(); toast(`${n}개 목록을 만들었습니다`); }],
+      ['바이낸스 목록 새로 만들기 (시총 · TradFi · 거래량 · 인기)', buildBinanceList],
+      ['여러 종목 한꺼번에 넣기…', multiPasteDialog],
+      ['이 목록 전체 복사', () => copyKeys(curList().items)],
       ['구분선 추가', async () => { const n = await askText('구분선 이름', '새 구역'); if (n) { curList().items.push('###' + n); save(); renderList(); } }],
       ['정렬: 변동률 높은 순', () => sortList((a, b) => (px[b]?.chgPct ?? -1e9) - (px[a]?.chgPct ?? -1e9))],
       ['정렬: 이름순', () => sortList((a, b) => DS.label(a).localeCompare(DS.label(b)))],
       '-',
       ['트레이딩뷰에서 가져오기', importTvDialog],
       ['트레이딩뷰 형식으로 저장 (.txt)', exportTv],
+      ['모든 관심목록 백업 파일로 저장 (.json)', () => download(`나만의차트_관심목록_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ lists: ST.lists, active: ST.active }, null, 1), 'application/json')],
+      ['백업 파일에서 관심목록 불러오기', restoreLists],
       '-',
       ['이 목록 삭제', async () => { if (ST.lists.length < 2) { toast('목록이 하나뿐이라 지울 수 없습니다'); return; } if (await confirmBox('목록 삭제', `「${curList().name}」을 지웁니다.`, '삭제')) { ST.lists.splice(ST.active, 1); ST.active = 0; save(); renderWlSel(); renderList(); } }],
     ]);
+  }
+  // 기본 목록을 다시 만들 때 내가 넣은 종목은 「내가 추가」 구역으로 남김
+  function mergeList(fresh, old) {
+    const base = new Set(fresh.items), mine = old.items.filter(k => !k.startsWith('###') && !base.has(k) && !(old.auto || []).includes(k));
+    return { ...old, ...fresh, items: mine.length ? [...fresh.items, '###내가 추가', ...mine] : fresh.items };
+  }
+  function restoreLists() {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      try {
+        const o = JSON.parse(await f.text()); if (!Array.isArray(o.lists)) throw new Error('관심목록 백업 파일이 아닙니다');
+        let n = 0; for (const l of o.lists) { if (!l || !Array.isArray(l.items)) continue; const i = ST.lists.findIndex(x => x.name === l.name);
+          if (i >= 0) { const have = new Set(ST.lists[i].items); ST.lists[i].items.push(...l.items.filter(k => !have.has(k))); } else ST.lists.push(l); n++; }
+        save(); renderWlSel(); renderList(); toast(`${n}개 목록을 불러왔습니다 (있던 종목은 그대로, 빠진 것만 더함)`);
+      } catch (e) { toast('불러오기 실패: ' + e.message, 5000); }
+    };
+    inp.click();
+  }
+  // 바이낸스 목록: 코인 시가총액 순 · TradFi 거래대금 순 · 거래대금 상위 · 인기(코인게코 트렌딩)
+  async function buildBinanceList() {
+    toast('바이낸스 목록 만드는 중…', 2000);
+    const perpOf = b => ['', '1000', '1000000', '1M'].map(p => p + b + 'USDT').find(id => DS.bx.syms.has(id) && !DS.bx.syms.get(id).tradfi);
+    const qv = id => (px['BINANCE:' + id] || {}).qv || 0;
+    let caps = [], trend = [];
+    try { caps = (await DS.cgMarkets(1)) || []; } catch {}
+    try { trend = ((await DS.cgTrending()) || {}).coins || []; } catch {}
+    const STABLE = /^(USDT|USDC|DAI|FDUSD|TUSD|USDE|USDS|PYUSD|USD1|RLUSD|USDD|USDG|BUSD|WBTC|WETH|STETH|WSTETH|WEETH|CBBTC|XAUT|PAXG)$/i;
+    const capKeys = [...new Set(caps.filter(c => !STABLE.test(c.symbol)).map(c => perpOf(c.symbol.toUpperCase())).filter(Boolean))].slice(0, 40).map(id => 'BINANCE:' + id);
+    const all = [...DS.bx.syms.values()].filter(v => v.status === 'TRADING' || !v.status);
+    const tradfi = all.filter(v => v.tradfi).sort((a, b) => qv(b.id) - qv(a.id)).slice(0, 40).map(v => 'BINANCE:' + v.id);
+    const volKeys = all.filter(v => !v.tradfi).sort((a, b) => qv(b.id) - qv(a.id)).slice(0, 25).map(v => 'BINANCE:' + v.id);
+    const hot = [...new Set(trend.map(t => perpOf(String(t.item && t.item.symbol || '').toUpperCase())).filter(Boolean))].slice(0, 15).map(id => 'BINANCE:' + id);
+    if (!capKeys.length && !volKeys.length) { toast('바이낸스·코인게코 시세를 못 받았습니다. 잠시 뒤 다시 해 보세요.'); return; }
+    const fresh = { name: '바이낸스 (시총·TradFi·거래량·인기)', items: [
+      `###코인 시가총액 순 (${new Date().toLocaleDateString('ko-KR')})`, ...capKeys,
+      '###TradFi (주식·원자재) 거래대금 순', ...tradfi,
+      '###거래대금 상위 (24시간)', ...volKeys.filter(k => !capKeys.includes(k)),
+      ...(hot.length ? ['###인기 (코인게코 트렌딩)', ...hot.filter(k => !capKeys.includes(k) && !volKeys.includes(k))] : []),
+    ] };
+    fresh.auto = fresh.items.filter(k => !k.startsWith('###'));
+    const i = ST.lists.findIndex(x => x.name === fresh.name);
+    if (i >= 0) ST.lists[i] = mergeList(fresh, ST.lists[i]); else ST.lists.push(fresh);
+    ST.active = i >= 0 ? i : ST.lists.length - 1; ST.sideTab = 'wl';
+    save(); renderWlSel(); renderList(); toast(`바이낸스 목록: 시총 ${capKeys.length} · TradFi ${tradfi.length} · 거래대금 ${volKeys.length} · 인기 ${hot.length}`, 4000);
   }
   function sortList(cmp) { const L = curList(); L.items = L.items.filter(x => !x.startsWith('###')).sort(cmp); save(); renderList(); toast('정렬하면서 구분선은 지웠습니다'); }
   function newListFrom(name, keys) {
@@ -3958,17 +4241,24 @@ const UI = (() => {
     const coord = dw.type === 'hline' || dw.type === 'hray' ? `<div class="grid2">${num('gP0', '가격', +dw.p[0].p.toPrecision(10))}</div>`
       : pos ? `<div class="grid2">${num('gP0', '진입가', +dw.p[0].p.toPrecision(10))}${num('gP1', '목표가', +dw.p[1].p.toPrecision(10))}${num('gP2', '손절가', +(dw.p[2] ? dw.p[2].p : dw.p[0].p - (dw.p[1].p - dw.p[0].p)).toPrecision(10))}</div>` : '';
     const isTxt = dw.type === 'text' || dw.type === 'callout';
-    const styleRow = isTxt ? `<label>글자<textarea id="gTxt" rows="2">${esc(dw.text || '')}</textarea></label><div class="grid2"><label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label><label>글자 크기<input type="number" id="gSize" min="9" max="48" value="${dw.style.size || 14}"></label></div>`
+    const LBL = ['trend', 'ray', 'ext', 'arrow', 'hline', 'hray', 'vline', 'channel', 'rect', 'ellipse', 'triangle', 'path', 'fib', 'fibext', 'fibchannel', 'fibtime', 'pitchfork', 'cross'].includes(dw.type);
+    const extra = (LBL && !isTxt ? `<div class="grid2"><label>선에 글자<input id="gLbT" value="${esc(dw.text || '')}" placeholder="예: 지지선"></label><label>글자 크기<input type="number" id="gLbS" min="8" max="200" value="${dw.style.size || 12}"></label></div>` : '')
+      + (dw.type === 'trend' ? `<div class="grid2"><label class="chk"><input type="checkbox" id="gExL"${dw.style.extL ? ' checked' : ''}>왼쪽으로 연장</label><label class="chk"><input type="checkbox" id="gExR"${dw.style.extR ? ' checked' : ''}>오른쪽으로 연장</label></div>` : '')
+      + (dw.type === 'rect' || dw.type === 'ellipse' ? `<label>채우기 진하기 (%)<input type="number" id="gFill" min="0" max="100" value="${dw.style.fillA ?? 12}"></label>` : '')
+      + (dw.type === 'fibtime' ? `<label>간격 수열 (쉼표로)<input id="gSeq" value="${esc((dw.seq || [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]).join(', '))}"></label><label class="chk"><input type="checkbox" id="gSeqL"${dw.style.labels !== false ? ' checked' : ''}>숫자 표시</label>
+          <div class="dim" style="font-size:11.5px">두 점 사이 봉 수를 1로 보고, 수열의 각 수만큼 떨어진 곳에 세로선을 긋습니다.</div>` : '')
+      + (dw.type === 'brush' || dw.type === 'highlighter' ? `<div class="dim" style="font-size:11.5px">붓은 Esc를 누르거나 커서를 고를 때까지 계속 그려집니다.</div>` : '');
+    const styleRow = isTxt ? `<label>글자<textarea id="gTxt" rows="2">${esc(dw.text || '')}</textarea></label><div class="grid2"><label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label><label>글자 크기 (8~200)<input type="number" id="gSize" min="8" max="200" value="${dw.style.size || 14}"></label></div>`
       : `<div class="grid2">${pos ? '' : `<label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label>`}<label>두께<input type="number" id="gW" min="1" max="5" value="${dw.style.w}"></label>
-        <label class="chk"><input type="checkbox" id="gDash"${dw.style.dash ? ' checked' : ''}>점선</label>${dw.type === 'regression' ? `<label>편차 (σ 배수)<input type="number" id="gDev" min="0.5" max="5" step="0.5" value="${dw.style.dev ?? 2}"></label>` : ''}</div>`;
+        <label class="chk"><input type="checkbox" id="gDash"${dw.style.dash ? ' checked' : ''}>점선</label>${dw.type === 'regression' ? `<label>편차 (σ 배수)<input type="number" id="gDev" min="0.5" max="5" step="0.5" value="${dw.style.dev ?? 2}"></label>` : ''}</div>` + extra;
     const fibBox = isFib ? `
-        <div class="grid2">${dw.type !== 'fibchannel' ? `<label class="chk"><input type="checkbox" id="gLog"${F.log ? ' checked' : ''}>로그 스케일 기준 레벨</label>` : ''}${dw.type === 'fib' ? `<label class="chk"><input type="checkbox" id="gRev"${F.reverse ? ' checked' : ''}>반전 (0과 1 바꾸기)</label>` : ''}
+        <div class="grid2"><label class="chk"><input type="checkbox" id="gLog"${(F.log ?? true) ? ' checked' : ''}>로그 스케일 기준 ${dw.type === 'fibchannel' ? '(퍼센트 폭)' : '레벨'}</label>${dw.type === 'fib' ? `<label class="chk"><input type="checkbox" id="gRev"${F.reverse ? ' checked' : ''}>반전 (0과 1 바꾸기)</label>` : ''}
         <label class="chk"><input type="checkbox" id="gExt"${F.extend ? ' checked' : ''}>${dw.type === 'fibchannel' ? '양쪽으로 연장' : '오른쪽으로 연장'}</label><label class="chk"><input type="checkbox" id="gLbl"${F.labels ? ' checked' : ''}>레벨 글자</label>
         ${dw.type !== 'fibchannel' ? `<label class="chk"><input type="checkbox" id="gPx"${F.prices ? ' checked' : ''}>가격 표시</label>` : ''}</div>
         <div id="lvBoxD" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto">${lvRows()}</div><button type="button" class="btn" id="lvAdd">레벨 추가</button>
         <div class="dim" style="font-size:11.5px">${HINT[dw.type]}</div>` : '';
     const d = openDlg(`<form method="dialog" class="in"><header>${esc(toolName(dw.type))}<button type="button" class="ib" data-x>✕</button></header>
-      <div class="body">${fibBox}${coord}${isFib ? '' : styleRow}${dw.pane && dw.pane !== 'main' ? '<div class="dim" style="font-size:11.5px">지표 패널에 그린 그림입니다.</div>' : ''}</div>
+      <div class="body">${fibBox}${coord}${isFib ? extra : styleRow}${dw.pane && dw.pane !== 'main' ? '<div class="dim" style="font-size:11.5px">지표 패널에 그린 그림입니다.</div>' : ''}</div>
       <footer><button type="button" class="btn danger left" id="gDel">삭제</button><button type="button" class="btn" id="gDup">복제</button>${isFib ? '<button type="button" class="btn" id="gTpl">새 피보 기본값으로 저장</button>' : ''}<button type="button" class="btn" data-x>취소</button><button class="btn primary" value="ok">확인</button></footer></form>`);
     const chk = id => { const el = d.querySelector('#' + id); return el ? el.checked : undefined; };
     const collect = () => {
@@ -3989,7 +4279,12 @@ const UI = (() => {
       d.onclose = null;
       if (d.returnValue !== 'ok') { CH.redraw(); return; } d.returnValue = '';
       if (isFib) dw.fib = collect();
-      else if (isTxt) { dw.text = d.querySelector('#gTxt').value; dw.style = { ...dw.style, color: d.querySelector('#gCol').value, size: +d.querySelector('#gSize').value || 14 }; if (!dw.text.trim()) { CH.selectDrawing(dw); CH.deleteSelected(); return; } }
+      const tv = id => d.querySelector('#' + id);
+      if (tv('gLbT')) { dw.text = tv('gLbT').value; dw.style = { ...dw.style, size: Math.max(8, Math.min(200, +tv('gLbS').value || 12)) }; }
+      if (tv('gExL')) dw.style = { ...dw.style, extL: tv('gExL').checked, extR: tv('gExR').checked };
+      if (tv('gFill')) dw.style = { ...dw.style, fillA: Math.max(0, Math.min(100, +tv('gFill').value)) };
+      if (tv('gSeq')) { const q = tv('gSeq').value.split(/[,\s]+/).map(Number).filter(n => isFinite(n)); if (q.length) dw.seq = q; dw.style = { ...dw.style, labels: tv('gSeqL').checked }; }
+      else if (isTxt) { dw.text = d.querySelector('#gTxt').value; dw.style = { ...dw.style, color: d.querySelector('#gCol').value, size: Math.max(8, Math.min(200, +d.querySelector('#gSize').value || 14)) }; if (!dw.text.trim()) { CH.selectDrawing(dw); CH.deleteSelected(); return; } }
       else dw.style = { ...dw.style, ...(d.querySelector('#gCol') ? { color: d.querySelector('#gCol').value } : {}), w: +d.querySelector('#gW').value || 1, dash: d.querySelector('#gDash').checked, ...(d.querySelector('#gDev') ? { dev: +d.querySelector('#gDev').value || 2 } : {}) };
       const v = id => { const el = d.querySelector('#' + id); return el && el.value !== '' && isFinite(+el.value) ? +el.value : null; };
       if (v('gP0') != null) dw.p[0].p = v('gP0');
@@ -4083,6 +4378,9 @@ const UI = (() => {
     measure: SV('<path d="M9 2v14M5 5l4-3 4 3M5 13l4 3 4-3"/>'),
     daterange: SV('<path d="M2 3v12M16 3v12M3 9h12M6 6L3 9l3 3M12 6l3 3-3 3"/>'),
     dpr: SV('<rect x="2" y="3" width="14" height="12" stroke-dasharray="2 1.5"/><path d="M9 5v8M4 9h10"/>'),
+    highlighter: SV('<path d="M3 15l2-5 7-7 3 3-7 7z" stroke-linejoin="round"/><path d="M2 16h7" stroke-width="2.4" opacity=".6"/>'),
+    eraser: SV('<path d="M6 15h9M3.5 11.5l7-7 4 4-7 7H6z" stroke-linejoin="round"/><path d="M7 8l4 4"/>'),
+    image: SV('<rect x="2" y="3" width="14" height="12" rx="1.5"/><circle cx="6.5" cy="7" r="1.4"/><path d="M3 14l4-4 3 3 2-2 3 3"/>'),
     cross: SV('<path d="M1 9h16M9 1v16"/>' + DOT(9, 9)),
     angle: SV('<path d="M3 15L15 4M3 15h12"/><path d="M9 15a6 6 0 0 0-2-4.5" stroke-dasharray="1.5 1.5"/>'),
     info: SV('<path d="M3 15L15 3"/>' + DOT(3, 15) + DOT(15, 3) + '<rect x="9" y="9" width="7" height="5" rx="1" fill="currentColor" stroke="none"/>'),
@@ -4106,13 +4404,14 @@ const UI = (() => {
     xabcd: ['XABCD 패턴'], abcd: ['ABCD 패턴'], hs: ['헤드 앤 숄더'], elliott5: ['엘리엇 임펄스 (12345)'], elliott3: ['엘리엇 조정 (ABC)'],
     long: ['롱 포지션'], short: ['숏 포지션'], measure: ['가격 범위', 'Alt+M'], daterange: ['날짜 범위'], dpr: ['날짜 · 가격 범위'], vwap: ['앵커드 VWAP'],
     rect: ['사각형'], ellipse: ['원 · 타원'], triangle: ['삼각형'], path: ['경로 (꺾은선)'], brush: ['붓 (자유 그리기)'],
-    text: ['텍스트'], callout: ['말풍선'], pricelabel: ['가격 라벨'],
+    text: ['텍스트'], callout: ['말풍선'], pricelabel: ['가격 라벨'], highlighter: ['형광펜'], eraser: ['지우개 (누르거나 끌어서 지움)'], image: ['그림 (Ctrl+V로 붙여넣기)'],
   };
   const TOOL_HOW = { channel: '점 3개: 선의 두 끝 → 채널 폭', fibext: '점 3개: 추세 시작 → 끝 → 되돌림', fibchannel: '점 3개: 기준선 두 끝 → 채널 폭', pitchfork: '점 3개: 손잡이 → 두 갈래',
     long: '진입가 → 목표가 (손절은 반대 같은 폭, 끌어서 조정)', short: '진입가 → 목표가 (손절은 반대 같은 폭)', brush: '누른 채 끌기', path: '점을 계속 찍고 두 번 클릭 또는 Enter로 끝',
     regression: '구간 두 점: 종가 회귀선 ± 2σ 채널', vwap: '기준 봉 하나: 그 봉부터 거래량 가중 평균가', cycles: '두 점 간격으로 수직선 반복', callout: '가리킬 곳 → 말풍선 자리',
     xabcd: '점 5개 X A B C D', abcd: '점 4개 A B C D', hs: '점 7개: 시작 · 왼어깨 · 골 · 머리 · 골 · 오른어깨 · 끝', elliott5: '점 6개: 0 1 2 3 4 5', elliott3: '점 4개: 0 A B C', triangle: '점 3개' };
   const TOOL_GROUPS = [
+    ['pen', '붓 · 형광펜 · 지우개', ['brush', 'highlighter', 'eraser']],
     ['lines', '선', ['trend', 'ray', 'info', 'ext', 'angle', 'hline', 'hray', 'vline', 'cross', 'arrow', 'channel', 'regression', 'cycles']],
     ['fibs', '피보나치 · 피치포크', ['fib', 'fibext', 'fibchannel', 'fibtime', 'pitchfork']],
     ['patterns', '패턴', ['xabcd', 'abcd', 'hs', 'elliott5', 'elliott3']],
@@ -4173,7 +4472,7 @@ const UI = (() => {
     bar.hidden = false; bar.dataset.id = d.id;
     bar.innerHTML = `<span class="nm">${esc(toolName(d.type))}</span>
       ${noColor ? '' : `<label class="sw" title="색" style="--c:${col}"><input type="color" data-k="color" value="${col}"></label>`}
-      ${d.type === 'text' || d.type === 'callout' ? `<select data-k="size" title="글자 크기">${[10, 12, 14, 18, 24, 32].map(v => `<option value="${v}"${(d.style.size || 14) == v ? ' selected' : ''}>${v}</option>`).join('')}</select>`
+      ${d.type === 'text' || d.type === 'callout' ? `<select data-k="size" title="글자 크기">${[10, 12, 14, 18, 24, 32, 48, 64, 96, 128, 160, 200].map(v => `<option value="${v}"${(d.style.size || 14) == v ? ' selected' : ''}>${v}</option>`).join('')}</select>`
         : `<select data-k="w" title="두께">${[1, 2, 3, 4].map(v => `<option value="${v}"${d.style.w == v ? ' selected' : ''}>${v}px</option>`).join('')}</select>
       <button data-k="dash" class="${d.style.dash ? 'on' : ''}" title="점선">${SB_ICON.dash}</button>`}
       <i class="sep"></i><button data-a="set" title="설정 (두 번 클릭)">${SB_ICON.set}</button><button data-a="dup" title="복제">${SB_ICON.dup}</button><button data-a="del" title="삭제 (Delete)">${SB_ICON.del}</button>`;
@@ -4280,6 +4579,8 @@ const UI = (() => {
       ['차트 맞추기', () => CH.fit(), { hint: 'Alt+R' }],
       ['최신 봉으로', () => CH.goLatest()],
       ['사진 저장', () => $('shotBtn').click()],
+      ['차트 사진 복사', copyChartImage, { hint: 'Ctrl+Alt+C' }],
+      ['그림 붙여넣기 (클립보드 사진)', async () => { try { const it = await navigator.clipboard.read(); for (const x of it) { const t = x.types.find(t => t.startsWith('image/')); if (t) { pasteImage(await x.getType(t)); return; } } toast('클립보드에 사진이 없습니다'); } catch { toast('Ctrl+V로 붙여 넣으세요'); } }, { hint: 'Ctrl+V' }],
       ['트레이딩뷰 원본에서 보기', () => setView('tv')],
     );
     showMenuAt(c.x, c.y, items, DS.label(ST.key) + ' · ' + DS.TF_NAME[ST.tf]);
@@ -4469,6 +4770,7 @@ const UI = (() => {
     $('logBtn').onclick = () => setScale(CH.cfg.scale === 'log' ? 'normal' : 'log');
     $('typeBtn').onclick = e => typeMenu(e.currentTarget);
     $('cfgBtn').onclick = settingsDialog;
+    $('shotBtn').oncontextmenu = e => { e.preventDefault(); showMenuAt(e.clientX, e.clientY, [['사진 저장 (.png)', () => $('shotBtn').click()], ['사진 복사', copyChartImage]]); };
     $('shotBtn').onclick = () => { const c = CH.screenshot(); if (!c) return; c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${DS.label(ST.key)}_${ST.tf}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}.png`; a.click(); }); };
     $('views').onclick = e => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); if (b?.dataset.view === 'chart') requestAnimationFrame(() => CH.render(true)); };
     tog('lockBtn', 'drawLock', v => CH.setLocked(v)); tog('hideBtn', 'drawHide', v => CH.setHidden(v));
@@ -4508,6 +4810,7 @@ const UI = (() => {
         if (m) { CH.setTool(m); e.preventDefault(); return; }
       }
       if (e.key === 'Enter' && CH.drawings.creating) { CH.finishCreate(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.code === 'KeyC') { e.preventDefault(); copyChartImage(); return; }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'KeyZ' || e.code === 'KeyY')) {
         const redo = e.code === 'KeyY' || e.shiftKey;
         if (redo ? CH.redo() : CH.undo()) toast(redo ? '다시 했습니다' : '되돌렸습니다', 1200); e.preventDefault(); return;
