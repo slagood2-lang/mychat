@@ -373,12 +373,49 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
 .droplists .dl-h{font-size:11px;color:var(--muted);padding:4px 8px 6px}
 .droplists .dl{padding:9px 10px;border:1px dashed var(--line);border-radius:6px;margin:4px 0;font-size:13px}
 .droplists .dl.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent)}
+/* ---------- 종목 아이콘 ---------- */
+.tki{position:relative;flex:none;width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;font:700 10px/1 var(--f-body);font-style:normal;color:#fff;background:var(--tc,#607d8b);overflow:hidden;text-transform:uppercase}
+.tki img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff;border-radius:50%}
+.tki.sm{width:16px;height:16px;font-size:8.5px}
+.list .row{grid-template-columns:20px minmax(0,1fr) 92px 64px}
+.sr b .tki{vertical-align:-3px;margin-right:6px}
+.list-head span:first-child{padding-left:26px}
+/* ---------- 호가 · 체결 ---------- */
+.ob{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;font:11.5px var(--f-mono);font-variant-numeric:tabular-nums;overflow:hidden}
+.ob .empty{padding:18px 12px;color:var(--muted);font-family:var(--f-body);text-align:center;line-height:1.6}
+.ob-h{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line);flex:none;font-family:var(--f-body)}
+.ob-h b{font-size:12.5px;margin-right:auto}
+.ob-h select{font:11.5px var(--f-body);border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:5px;padding:2px 4px;max-width:150px}
+.ob-u{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.ob-u button{border:0;background:transparent;color:var(--muted);font:11px var(--f-body);padding:2px 7px}
+.ob-u button.on{background:var(--chip);color:var(--fg);font-weight:600}
+.ob-note{padding:4px 8px;color:var(--muted);font:11px var(--f-body);border-bottom:1px solid var(--line);flex:none}
+.ob-th,.ob-r,.ob-tr{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:0 8px;align-items:center}
+.ob-th{color:var(--muted);font:10.5px var(--f-body);padding-top:4px;padding-bottom:3px;flex:none}
+.ob-th span:not(:first-child),.ob-r span:not(.p),.ob-tr span:last-child{text-align:right}
+.ob-tr span:nth-child(2){text-align:right}
+.ob-a,.ob-b{flex:none}
+.ob-r{position:relative;height:18px}
+.ob-r i{position:absolute;right:0;top:1px;bottom:1px;opacity:.16;pointer-events:none}
+.ob-r.a i{background:var(--down)}.ob-r.b i{background:var(--up)}
+.ob-r.a .p{color:var(--down)}.ob-r.b .p{color:var(--up)}
+.ob-mid{display:flex;align-items:center;gap:8px;padding:5px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);flex:none}
+.ob-mid b{font-size:14px}
+.ob-mid .dim{font:10.5px var(--f-body);color:var(--muted);white-space:nowrap}
+.ob-ratio{position:relative;margin-left:auto;flex:0 1 130px;height:16px;border-radius:3px;background:color-mix(in srgb,var(--down) 30%,transparent);overflow:hidden;display:flex;justify-content:space-between;align-items:center;font:10px var(--f-body)}
+.ob-ratio i{position:absolute;left:0;top:0;bottom:0;background:color-mix(in srgb,var(--up) 38%,transparent)}
+.ob-ratio em{position:relative;font-style:normal;padding:0 4px;white-space:nowrap}
+.ob-t{flex:1 1 0;overflow-y:auto;min-height:60px}
+.ob-tr{height:17px}
+.ob-tr span:first-child{color:var(--muted)}
+.ob-tr.big{background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:700}
+.ob .pos{color:var(--up)}.ob .neg{color:var(--down)}
 </style>
 </head>
 <body data-view="chart">
 <div class="app">
   <header class="top" id="top">
-    <button class="sym-btn chart-only" id="symBtn" title="심볼 검색 (아무 글자나 입력해도 열림)"><svg width="14" height="14" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l4 4" stroke="currentColor" stroke-width="1.6"/></svg><span id="symLbl">-</span></button>
+    <button class="sym-btn chart-only" id="symBtn" title="심볼 검색 (아무 글자나 입력해도 열림)"><svg width="14" height="14" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l4 4" stroke="currentColor" stroke-width="1.6"/></svg><span id="symIco"></span><span id="symLbl">-</span></button>
     <button class="tb star chart-only" id="starBtn" title="관심목록에 추가/빼기">☆</button>
     <span class="vsep chart-only"></span>
     <div class="tfs chart-only" id="tfBar"></div>
@@ -428,7 +465,7 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
     </section>
     <section class="split" id="split"></section>
     <aside class="side">
-      <div class="side-tabs" id="sideTabs"><button data-tab="wl">관심목록</button><button data-tab="scan">스캔 결과<small id="nScan"></small></button><button data-tab="disc">찾기 결과<small id="nDisc"></small></button></div>
+      <div class="side-tabs" id="sideTabs"><button data-tab="wl">관심목록</button><button data-tab="scan">스캔 결과<small id="nScan"></small></button><button data-tab="disc">찾기 결과<small id="nDisc"></small></button><button data-tab="ob" title="호가 · 체결 (바이낸스 실시간)">호가</button></div>
       <div class="detail" id="detail"></div>
       <div class="detail-grip" id="detailGrip" title="끌어서 높이 조절 · 두 번 누르면 자동"></div>
       <div class="wl-head" id="wlHead">
@@ -438,6 +475,7 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
       </div>
       <div class="list-head" id="listHead"><span>심볼</span><span>현재가</span><span>변동%</span></div>
       <div class="list" id="list"></div>
+      <div class="ob" id="obPanel" hidden></div>
     </aside>
   </main>
 
@@ -831,6 +869,224 @@ const IND = (() => {
   return { emaP, smaP, rmaP, last, rsi, wt, macd, bb, nweRepaint, nweEndpoint, td, trendStats, toYearly, fibPrice, fbb, FBB_LV };
 })();
 
+
+// ============================================================
+// pack.js — 지표 팩 (트레이딩뷰 기본 지표와 같은 공식 · 순수 계산만)
+// 입력 d = { T(초), O, H, L, C, V, N, tfSec } · 출력 = { 플롯 키: 배열 }
+// plots: [키, 범례 이름, 색, 종류(line|dash|hist|dots|sparse), 두께]
+// ============================================================
+const PACK = (() => {
+  const fin = Number.isFinite, nan = n => new Array(n).fill(NaN);
+  const map2 = (a, b, f) => a.map((x, i) => f(x, b[i], i));
+  const hl2 = d => map2(d.H, d.L, (h, l) => (h + l) / 2);
+  const hlc3 = d => d.H.map((h, i) => (h + d.L[i] + d.C[i]) / 3);
+  const srcOf = (d, s) => s === 'open' ? d.O : s === 'high' ? d.H : s === 'low' ? d.L : s === 'hl2' ? hl2(d) : s === 'hlc3' ? hlc3(d) : d.C;
+  const SRC = { o: [['close', '종가'], ['open', '시가'], ['high', '고가'], ['low', '저가'], ['hl2', '(고+저)/2'], ['hlc3', '(고+저+종)/3']] };
+  // 창 안의 값이 모두 있을 때만 계산 (NaN을 만나면 다시 채움)
+  function roll(a, p, f) {
+    const out = nan(a.length); let ok = 0;
+    for (let i = 0; i < a.length; i++) { ok = fin(a[i]) ? ok + 1 : 0; if (ok >= p) out[i] = f(a, i - p + 1, i); }
+    return out;
+  }
+  const sum = (a, p) => { const out = nan(a.length); let s = 0, n = 0; for (let i = 0; i < a.length; i++) { if (!fin(a[i])) { s = 0; n = 0; continue; } s += a[i]; n++; if (n > p) { s -= a[i - p]; n = p; } if (n === p) out[i] = s; } return out; };
+  const sma = (a, p) => sum(a, p).map(x => x / p);
+  // ta.ema: 처음 p개 평균으로 시작 · 중간 NaN은 건너뜀
+  function ema(a, p, k = 2 / (p + 1)) {
+    const out = nan(a.length); let e = NaN, s = 0, n = 0;
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i]; if (!fin(x)) continue;
+      if (!fin(e)) { s += x; n++; if (n === p) { e = s / p; out[i] = e; } continue; }
+      e = x * k + e * (1 - k); out[i] = e;
+    }
+    return out;
+  }
+  const rma = (a, p) => ema(a, p, 1 / p);
+  const wma = (a, p) => roll(a, p, (x, s, e) => { let n = 0, d = 0; for (let j = s; j <= e; j++) { const w = j - s + 1; n += x[j] * w; d += w; } return n / d; });
+  const hh = (a, p) => roll(a, p, (x, s, e) => { let m = -Infinity; for (let j = s; j <= e; j++) if (x[j] > m) m = x[j]; return m; });
+  const ll = (a, p) => roll(a, p, (x, s, e) => { let m = Infinity; for (let j = s; j <= e; j++) if (x[j] < m) m = x[j]; return m; });
+  const stdev = (a, p) => roll(a, p, (x, s, e) => { let m = 0; for (let j = s; j <= e; j++) m += x[j]; m /= p; let v = 0; for (let j = s; j <= e; j++) v += (x[j] - m) ** 2; return Math.sqrt(v / p); });
+  const chg = (a, k = 1) => a.map((x, i) => i >= k ? x - a[i - k] : NaN);
+  const lag = (a, k) => a.map((x, i) => i >= k ? a[i - k] : NaN);
+  const cum = a => { let s = 0; return a.map(x => { if (fin(x)) s += x; return s; }); };
+  const tr = d => d.H.map((h, i) => i ? Math.max(h - d.L[i], Math.abs(h - d.C[i - 1]), Math.abs(d.L[i] - d.C[i - 1])) : h - d.L[i]);
+  const atr = (d, p) => rma(tr(d), p);
+  const linreg = (a, p, off = 0) => roll(a, p, (x, s) => {
+    let sx = 0, sy = 0, sxy = 0, sxx = 0;
+    for (let j = 0; j < p; j++) { const y = x[s + j]; sx += j; sy += y; sxy += j * y; sxx += j * j; }
+    const m = (p * sxy - sx * sy) / (p * sxx - sx * sx), b = (sy - m * sx) / p;
+    return b + m * (p - 1 - off);
+  });
+  const rsi = (a, p) => {
+    const u = rma(a.map((c, i) => i ? Math.max(c - a[i - 1], 0) : NaN), p), dn = rma(a.map((c, i) => i ? Math.max(a[i - 1] - c, 0) : NaN), p);
+    return u.map((x, i) => !fin(x) || !fin(dn[i]) ? NaN : dn[i] === 0 ? 100 : 100 - 100 / (1 + x / dn[i]));
+  };
+  const stochRaw = (c, h, l, p) => { const H = hh(h, p), L = ll(l, p); return c.map((x, i) => H[i] === L[i] ? (fin(H[i]) ? 50 : NaN) : 100 * (x - L[i]) / (H[i] - L[i])); };
+  const mfv = d => d.C.map((c, i) => d.H[i] === d.L[i] ? 0 : ((c - d.L[i]) - (d.H[i] - c)) / (d.H[i] - d.L[i]) * d.V[i]);
+  const tsi = (c, lng, sht) => { const pc = chg(c); const a = ema(ema(pc, lng), sht), b = ema(ema(pc.map(Math.abs), lng), sht); return map2(a, b, (x, y) => x / y); };
+  const swma = a => a.map((x, i) => i >= 3 ? (a[i - 3] + 2 * a[i - 2] + 2 * a[i - 1] + x) / 6 : NaN);
+  const div = (a, b) => map2(a, b, (x, y) => y === 0 ? NaN : x / y);
+  const sub = (a, b) => map2(a, b, (x, y) => x - y);
+  const G = '#22ab94', R = '#f23645', B = '#2962ff', O = '#ff6d00', Y = '#f0b429', V = '#7e57c2', M = '#787b86', P = '#e040fb', T = '#00bcd4';
+  const len = (def = 14, l = '길이') => ['len', l, def];
+  const src = (def = 'close') => ['src', '소스', def, SRC];
+
+  const S = {
+    // ---------------- 이동평균 ----------------
+    wma: { n: '가중 이동평균 (WMA)', s: 'WMA', cat: 'ma', in: [len(9), src()], plots: [['v', 'WMA', B]], calc: (d, p) => ({ v: wma(srcOf(d, p.src), p.len) }) },
+    vwma: { n: '거래량 가중 이동평균 (VWMA)', s: 'VWMA', cat: 'ma', in: [len(20), src()], plots: [['v', 'VWMA', B]],
+      calc: (d, p) => { const s = srcOf(d, p.src); return { v: div(sma(map2(s, d.V, (x, v) => x * v), p.len), sma(d.V, p.len)) }; } },
+    hma: { n: '헐 이동평균 (HMA)', s: 'HMA', cat: 'ma', in: [len(9), src()], plots: [['v', 'HMA', B]],
+      calc: (d, p) => { const s = srcOf(d, p.src), a = wma(s, Math.max(1, Math.floor(p.len / 2))), b = wma(s, p.len); return { v: wma(map2(a, b, (x, y) => 2 * x - y), Math.max(1, Math.floor(Math.sqrt(p.len)))) }; } },
+    dema: { n: '더블 EMA (DEMA)', s: 'DEMA', cat: 'ma', in: [len(9), src()], plots: [['v', 'DEMA', '#43a047']],
+      calc: (d, p) => { const e1 = ema(srcOf(d, p.src), p.len), e2 = ema(e1, p.len); return { v: map2(e1, e2, (a, b) => 2 * a - b) }; } },
+    tema: { n: '트리플 EMA (TEMA)', s: 'TEMA', cat: 'ma', in: [len(9), src()], plots: [['v', 'TEMA', B]],
+      calc: (d, p) => { const e1 = ema(srcOf(d, p.src), p.len), e2 = ema(e1, p.len), e3 = ema(e2, p.len); return { v: e1.map((a, i) => 3 * (a - e2[i]) + e3[i]) }; } },
+    smma: { n: '스무디드 이동평균 (SMMA · RMA)', s: 'SMMA', cat: 'ma', in: [len(7), src()], plots: [['v', 'SMMA', '#673ab7']], calc: (d, p) => ({ v: rma(srcOf(d, p.src), p.len) }) },
+    lsma: { n: '최소제곱 이동평균 (LSMA · 선형회귀 곡선)', s: 'LSMA', cat: 'ma', in: [len(25), ['off', '오프셋', 0, { min: 0 }], src()], plots: [['v', 'LSMA', B]], calc: (d, p) => ({ v: linreg(srcOf(d, p.src), p.len, p.off) }) },
+    alma: { n: '아르노 르구 이동평균 (ALMA)', s: 'ALMA', cat: 'ma', in: [len(9), ['off', '오프셋', 0.85, { min: 0, max: 1, step: 0.05 }], ['sig', '시그마', 6, { min: 1 }], src()], plots: [['v', 'ALMA', B]],
+      calc: (d, p) => { const m = p.off * (p.len - 1), s = p.len / p.sig, w = []; let ws = 0; for (let i = 0; i < p.len; i++) { w[i] = Math.exp(-((i - m) ** 2) / (2 * s * s)); ws += w[i]; }
+        return { v: roll(srcOf(d, p.src), p.len, (x, st) => { let t = 0; for (let i = 0; i < p.len; i++) t += x[st + i] * w[i]; return t / ws; }) }; } },
+    kama: { n: '적응형 이동평균 (KAMA)', s: 'KAMA', cat: 'ma', in: [len(10), ['fast', '빠른 길이', 2], ['slow', '느린 길이', 30], src()], plots: [['v', 'KAMA', B]],
+      calc: (d, p) => { const s = srcOf(d, p.src), vol = sum(chg(s).map(Math.abs), p.len), out = nan(d.N), f = 2 / (p.fast + 1), sl = 2 / (p.slow + 1); let k = NaN;
+        for (let i = p.len; i < d.N; i++) { const er = vol[i] ? Math.abs(s[i] - s[i - p.len]) / vol[i] : 0, sc = (er * (f - sl) + sl) ** 2; k = fin(k) ? k + sc * (s[i] - k) : s[i]; out[i] = k; } return { v: out }; } },
+    mcginley: { n: '맥긴리 다이내믹', s: 'McGinley', cat: 'ma', in: [len(14), src()], plots: [['v', 'McGinley', B]],
+      calc: (d, p) => { const s = srcOf(d, p.src), e = ema(s, p.len), out = nan(d.N); let m = NaN; for (let i = 0; i < d.N; i++) { if (!fin(m)) { m = e[i]; } else m = m + (s[i] - m) / (p.len * (s[i] / m) ** 4); out[i] = m; } return { v: out }; } },
+    gmma: { n: '구피 멀티플 이동평균 (GMMA)', s: 'GMMA', cat: 'ma', in: [],
+      plots: [3, 5, 8, 10, 12, 15].map(n => ['s' + n, 'EMA ' + n, G, 'line', 1]).concat([30, 35, 40, 45, 50, 60].map(n => ['l' + n, 'EMA ' + n, R, 'line', 1])),
+      calc: d => { const o = {}; for (const n of [3, 5, 8, 10, 12, 15]) o['s' + n] = ema(d.C, n); for (const n of [30, 35, 40, 45, 50, 60]) o['l' + n] = ema(d.C, n); return o; }, quiet: true },
+    alligator: { n: '윌리엄스 앨리게이터', s: 'Alligator', cat: 'ma', in: [['jaw', '턱 길이', 13], ['teeth', '이빨 길이', 8], ['lips', '입술 길이', 5], ['jo', '턱 오프셋', 8, { min: 0 }], ['to', '이빨 오프셋', 5, { min: 0 }], ['lo', '입술 오프셋', 3, { min: 0 }]],
+      plots: [['jaw', '턱', B, 'line', 1, p => p.jo], ['teeth', '이빨', R, 'line', 1, p => p.to], ['lips', '입술', G, 'line', 1, p => p.lo]],
+      calc: (d, p) => { const s = hl2(d); return { jaw: rma(s, p.jaw), teeth: rma(s, p.teeth), lips: rma(s, p.lips) }; } },
+    vwap: { n: 'VWAP (거래량 가중 평균가)', s: 'VWAP', cat: 'ma', in: [['anchor', '기준', 'D', { o: [['D', '하루 (UTC)'], ['W', '주'], ['M', '달']] }], ['band', '표준편차 밴드 배수 (0 = 끔)', 0, { min: 0, step: 0.5 }]],
+      plots: [['v', 'VWAP', B], ['up', '상단', G, 'line', 1], ['lo', '하단', G, 'line', 1]],
+      calc: (d, p) => { const s = hlc3(d), v = nan(d.N), up = nan(d.N), lo = nan(d.N); let pv = 0, vv = 0, p2 = 0, cur = null;
+        const bucket = t => p.anchor === 'W' ? Math.floor((t / 86400 + 3) / 7) : p.anchor === 'M' ? (D => D.getUTCFullYear() * 12 + D.getUTCMonth())(new Date(t * 1000)) : Math.floor(t / 86400);
+        for (let i = 0; i < d.N; i++) { const b = bucket(d.T[i]); if (b !== cur) { cur = b; pv = vv = p2 = 0; } pv += s[i] * d.V[i]; vv += d.V[i]; p2 += s[i] * s[i] * d.V[i];
+          if (vv > 0) { v[i] = pv / vv; if (p.band > 0) { const sd = Math.sqrt(Math.max(0, p2 / vv - v[i] * v[i])); up[i] = v[i] + p.band * sd; lo[i] = v[i] - p.band * sd; } } }
+        return { v, up, lo }; } },
+    // ---------------- 추세 · 밴드 · 채널 ----------------
+    supertrend: { n: '수퍼트렌드', s: 'Supertrend', cat: 'trend', in: [['len', 'ATR 길이', 10], ['f', '배수', 3, { min: 0.1, step: 0.1 }]], plots: [['up', '상승 추세', G, 'line', 2], ['dn', '하락 추세', R, 'line', 2]],
+      calc: (d, p) => { const a = atr(d, p.len), m = hl2(d), up = nan(d.N), dn = nan(d.N); let U = NaN, L = NaN, dir = 1, prev = NaN;
+        for (let i = 0; i < d.N; i++) { if (!fin(a[i])) continue; let u = m[i] + p.f * a[i], l = m[i] - p.f * a[i];
+          if (fin(L)) { l = l > L || d.C[i - 1] < L ? l : L; u = u < U || d.C[i - 1] > U ? u : U; }
+          if (!fin(prev)) dir = 1; else if (prev === U) dir = d.C[i] > u ? -1 : 1; else dir = d.C[i] < l ? 1 : -1;
+          U = u; L = l; prev = dir === -1 ? l : u; if (dir === -1) up[i] = l; else dn[i] = u; }
+        return { up, dn }; } },
+    psar: { n: '파라볼릭 SAR', s: 'SAR', cat: 'trend', in: [['st', '시작', 0.02, { min: 0.001, step: 0.01 }], ['inc', '증가', 0.02, { min: 0.001, step: 0.01 }], ['mx', '최대', 0.2, { min: 0.01, step: 0.01 }]], plots: [['v', 'SAR', B, 'dots']],
+      calc: (d, p) => { const out = nan(d.N); if (d.N < 2) return { v: out }; let up = d.C[1] >= d.C[0], af = p.st, ep = up ? d.H[1] : d.L[1], sar = up ? d.L[0] : d.H[0]; out[1] = sar;
+        for (let i = 2; i < d.N; i++) { sar = sar + af * (ep - sar);
+          if (up) { sar = Math.min(sar, d.L[i - 1], d.L[i - 2]); if (d.L[i] < sar) { up = false; sar = ep; ep = d.L[i]; af = p.st; } else if (d.H[i] > ep) { ep = d.H[i]; af = Math.min(p.mx, af + p.inc); } }
+          else { sar = Math.max(sar, d.H[i - 1], d.H[i - 2]); if (d.H[i] > sar) { up = true; sar = ep; ep = d.H[i]; af = p.st; } else if (d.L[i] < ep) { ep = d.L[i]; af = Math.min(p.mx, af + p.inc); } }
+          out[i] = sar; }
+        return { v: out }; } },
+    ichimoku: { n: '일목균형표 (Ichimoku Cloud)', s: 'Ichimoku', cat: 'trend', in: [['conv', '전환선', 9], ['base', '기준선', 26], ['spanB', '선행스팬 B', 52], ['disp', '이동', 26]],
+      plots: [['conv', '전환선', B], ['base', '기준선', '#b71c1c'], ['lag', '후행스팬', '#43a047', 'line', 1, p => -(p.disp - 1)], ['a', '선행스팬 A', '#a5d6a7', 'line', 1, p => p.disp - 1], ['b', '선행스팬 B', '#ef9a9a', 'line', 1, p => p.disp - 1]],
+      calc: (d, p) => { const mid = n => map2(hh(d.H, n), ll(d.L, n), (a, b) => (a + b) / 2), conv = mid(p.conv), base = mid(p.base); return { conv, base, lag: d.C, a: map2(conv, base, (x, y) => (x + y) / 2), b: mid(p.spanB) }; } },
+    donchian: { n: '돈치안 채널', s: 'DC', cat: 'band', in: [len(20)], plots: [['up', '상단', B, 'line', 1], ['mid', '중간', O, 'line', 1], ['lo', '하단', B, 'line', 1]],
+      calc: (d, p) => { const up = hh(d.H, p.len), lo = ll(d.L, p.len); return { up, lo, mid: map2(up, lo, (a, b) => (a + b) / 2) }; } },
+    keltner: { n: '켈트너 채널', s: 'KC', cat: 'band', in: [len(20), ['mult', '배수', 2, { min: 0.1, step: 0.1 }], ['atr', 'ATR 길이', 10], src()], plots: [['up', '상단', B, 'line', 1], ['mid', '기준', B, 'line', 1], ['lo', '하단', B, 'line', 1]],
+      calc: (d, p) => { const mid = ema(srcOf(d, p.src), p.len), a = atr(d, p.atr); return { mid, up: map2(mid, a, (m, x) => m + p.mult * x), lo: map2(mid, a, (m, x) => m - p.mult * x) }; } },
+    envelope: { n: '엔빌로프', s: 'Env', cat: 'band', in: [len(20), ['pct', '퍼센트', 10, { min: 0.1, step: 0.1 }], ['exp', '지수 이동평균', false], src()], plots: [['up', '상단', B, 'line', 1], ['mid', '기준', O, 'line', 1], ['lo', '하단', B, 'line', 1]],
+      calc: (d, p) => { const s = srcOf(d, p.src), mid = p.exp ? ema(s, p.len) : sma(s, p.len); return { mid, up: mid.map(m => m * (1 + p.pct / 100)), lo: mid.map(m => m * (1 - p.pct / 100)) }; } },
+    chandekroll: { n: '샹드 크롤 스탑', s: 'CKS', cat: 'trend', in: [['p', 'ATR 길이', 10], ['x', 'ATR 배수', 1, { min: 0.1, step: 0.1 }], ['q', '스탑 길이', 9]], plots: [['long', '롱 스탑', B, 'line', 1], ['short', '숏 스탑', O, 'line', 1]],
+      calc: (d, p) => { const a = atr(d, p.p), fh = map2(hh(d.H, p.p), a, (h, x) => h - p.x * x), fl = map2(ll(d.L, p.p), a, (l, x) => l + p.x * x); return { short: hh(fh, p.q), long: ll(fl, p.q) }; } },
+    zigzag: { n: '지그재그', s: 'ZigZag', cat: 'trend', in: [['dev', '되돌림 (%)', 5, { min: 0.1, step: 0.1 }]], plots: [['v', '지그재그', B, 'sparse', 2]],
+      calc: (d, p) => { const out = nan(d.N); if (!d.N) return { v: out }; const k = p.dev / 100; let dir = 0, hi = d.H[0], hiI = 0, lo = d.L[0], loI = 0;
+        for (let i = 1; i < d.N; i++) {
+          if (dir >= 0 && d.H[i] > hi) { hi = d.H[i]; hiI = i; } if (dir <= 0 && d.L[i] < lo) { lo = d.L[i]; loI = i; }
+          if (dir >= 0 && d.L[i] < hi * (1 - k) && hiI !== i) { if (dir === 0) out[loI < hiI ? loI : 0] = loI < hiI ? lo : d.L[0]; out[hiI] = hi; dir = -1; lo = d.L[i]; loI = i; }
+          else if (dir <= 0 && d.H[i] > lo * (1 + k) && loI !== i) { if (dir === 0) out[hiI < loI ? hiI : 0] = hiI < loI ? hi : d.H[0]; out[loI] = lo; dir = 1; hi = d.H[i]; hiI = i; }
+        }
+        if (dir > 0) out[hiI] = hi; else if (dir < 0) out[loI] = lo;
+        return { v: out }; } },
+    fractals: { n: '윌리엄스 프랙탈', s: 'Fractals', cat: 'trend', in: [['n', '좌우 봉 수', 2]], plots: [['up', '위 프랙탈', R, 'dots'], ['dn', '아래 프랙탈', G, 'dots']],
+      calc: (d, p) => { const up = nan(d.N), dn = nan(d.N), n = p.n;
+        for (let i = n; i < d.N - n; i++) { let u = true, l = true; for (let j = 1; j <= n; j++) { if (!(d.H[i] > d.H[i - j] && d.H[i] > d.H[i + j])) u = false; if (!(d.L[i] < d.L[i - j] && d.L[i] < d.L[i + j])) l = false; } if (u) up[i] = d.H[i]; if (l) dn[i] = d.L[i]; }
+        return { up, dn }; } },
+    // ---------------- 모멘텀 (아래 패널) ----------------
+    stoch: { n: '스토캐스틱', s: 'Stoch', cat: 'mom', pane: 1, range: [0, 100], lv: [80, 50, 20], in: [['k', '%K 길이', 14], ['sk', '%K 스무딩', 1], ['dd', '%D 스무딩', 3]], plots: [['k', '%K', B], ['d', '%D', O, 'line', 1]],
+      calc: (d, p) => { const k = sma(stochRaw(d.C, d.H, d.L, p.k), p.sk); return { k, d: sma(k, p.dd) }; } },
+    stochrsi: { n: '스토캐스틱 RSI', s: 'Stoch RSI', cat: 'mom', pane: 1, range: [0, 100], lv: [80, 50, 20], in: [['sk', '%K', 3], ['dd', '%D', 3], ['rsi', 'RSI 길이', 14], ['st', '스토캐스틱 길이', 14]], plots: [['k', '%K', B], ['d', '%D', O, 'line', 1]],
+      calc: (d, p) => { const r = rsi(d.C, p.rsi), k = sma(stochRaw(r, r, r, p.st), p.sk); return { k, d: sma(k, p.dd) }; } },
+    cci: { n: 'CCI (커모디티 채널 인덱스)', s: 'CCI', cat: 'mom', pane: 1, lv: [100, 0, -100], in: [len(20)], plots: [['v', 'CCI', B]],
+      calc: (d, p) => { const s = hlc3(d), m = sma(s, p.len), md = roll(s, p.len, (x, st, e) => { let a = 0; for (let j = st; j <= e; j++) a += Math.abs(x[j] - m[e]); return a / p.len; }); return { v: s.map((x, i) => (x - m[i]) / (0.015 * md[i])) }; } },
+    willr: { n: '윌리엄스 %R', s: '%R', cat: 'mom', pane: 1, range: [-100, 0], lv: [-20, -50, -80], in: [len(14)], plots: [['v', '%R', V]],
+      calc: (d, p) => { const H = hh(d.H, p.len), L = ll(d.L, p.len); return { v: d.C.map((c, i) => H[i] === L[i] ? NaN : -100 * (H[i] - c) / (H[i] - L[i])) }; } },
+    mfi: { n: 'MFI (머니 플로우 인덱스)', s: 'MFI', cat: 'vol', pane: 1, range: [0, 100], lv: [80, 50, 20], in: [len(14)], plots: [['v', 'MFI', V]],
+      calc: (d, p) => { const s = hlc3(d), c = chg(s), up = sum(s.map((x, i) => i ? (c[i] > 0 ? x * d.V[i] : 0) : NaN), p.len), dn = sum(s.map((x, i) => i ? (c[i] < 0 ? x * d.V[i] : 0) : NaN), p.len); return { v: map2(up, dn, (u, l) => !fin(u) ? NaN : l === 0 ? 100 : 100 - 100 / (1 + u / l)) }; } },
+    roc: { n: 'ROC (변화율)', s: 'ROC', cat: 'mom', pane: 1, lv: [0], in: [len(9), src()], plots: [['v', 'ROC', B]], calc: (d, p) => { const s = srcOf(d, p.src); return { v: s.map((x, i) => i >= p.len ? 100 * (x - s[i - p.len]) / s[i - p.len] : NaN) }; } },
+    mom: { n: '모멘텀', s: 'Mom', cat: 'mom', pane: 1, fmt: 'price', lv: [0], in: [len(10), src()], plots: [['v', 'Mom', B]], calc: (d, p) => ({ v: chg(srcOf(d, p.src), p.len) }) },
+    ao: { n: '오썸 오실레이터 (AO)', s: 'AO', cat: 'mom', pane: 1, fmt: 'price', in: [], plots: [['v', 'AO', G, 'hist']], hc: 'rise', calc: d => { const s = hl2(d); return { v: sub(sma(s, 5), sma(s, 34)) }; } },
+    ac: { n: '액설러레이터 오실레이터 (AC)', s: 'AC', cat: 'mom', pane: 1, fmt: 'price', in: [], plots: [['v', 'AC', G, 'hist']], hc: 'rise', calc: d => { const s = hl2(d), ao = sub(sma(s, 5), sma(s, 34)); return { v: sub(ao, sma(ao, 5)) }; } },
+    trix: { n: 'TRIX', s: 'TRIX', cat: 'mom', pane: 1, lv: [0], in: [len(18)], plots: [['v', 'TRIX', R]], calc: (d, p) => ({ v: chg(ema(ema(ema(d.C.map(Math.log), p.len), p.len), p.len)).map(x => 10000 * x) }) },
+    tsi: { n: 'TSI (트루 스트렝스 인덱스)', s: 'TSI', cat: 'mom', pane: 1, lv: [0], in: [['lng', '긴 길이', 25], ['sht', '짧은 길이', 13], ['sig', '시그널', 13]], plots: [['v', 'TSI', B], ['s', '시그널', R, 'line', 1]],
+      calc: (d, p) => { const v = tsi(d.C, p.lng, p.sht).map(x => 100 * x); return { v, s: ema(v, p.sig) }; } },
+    smi: { n: 'SMI 에르고딕 인디케이터', s: 'SMI', cat: 'mom', pane: 1, prec: 4, lv: [0], in: [['lng', '긴 길이', 20], ['sht', '짧은 길이', 5], ['sig', '시그널', 5]], plots: [['v', 'SMI', B], ['s', '시그널', O, 'line', 1], ['h', '오실레이터', R, 'hist']],
+      calc: (d, p) => { const v = tsi(d.C, p.lng, p.sht), s = ema(v, p.sig); return { v, s, h: sub(v, s) }; } },
+    uo: { n: '얼티미트 오실레이터', s: 'UO', cat: 'mom', pane: 1, range: [0, 100], lv: [70, 50, 30], in: [['a', '빠른 길이', 7], ['b', '중간 길이', 14], ['c', '느린 길이', 28]], plots: [['v', 'UO', R]],
+      calc: (d, p) => { const bp = d.C.map((c, i) => i ? c - Math.min(d.L[i], d.C[i - 1]) : NaN), t = d.C.map((c, i) => i ? Math.max(d.H[i], d.C[i - 1]) - Math.min(d.L[i], d.C[i - 1]) : NaN);
+        const av = n => div(sum(bp, n), sum(t, n)), x = av(p.a), y = av(p.b), z = av(p.c); return { v: x.map((q, i) => 100 * (4 * q + 2 * y[i] + z[i]) / 7) }; } },
+    aroon: { n: '아룬', s: 'Aroon', cat: 'trend', pane: 1, range: [0, 100], in: [len(14)], plots: [['up', '아룬 업', O], ['dn', '아룬 다운', B, 'line', 1]],
+      calc: (d, p) => { const n = p.len, up = nan(d.N), dn = nan(d.N); for (let i = n; i < d.N; i++) { let hi = i - n, lo = i - n; for (let j = i - n; j <= i; j++) { if (d.H[j] >= d.H[hi]) hi = j; if (d.L[j] <= d.L[lo]) lo = j; } up[i] = 100 * (n - (i - hi)) / n; dn[i] = 100 * (n - (i - lo)) / n; } return { up, dn }; } },
+    dpo: { n: 'DPO (디트렌디드 프라이스 오실레이터)', s: 'DPO', cat: 'mom', pane: 1, fmt: 'price', lv: [0], in: [len(21)], plots: [['v', 'DPO', '#43a047']], calc: (d, p) => { const m = lag(sma(d.C, p.len), Math.floor(p.len / 2) + 1); return { v: sub(d.C, m) }; } },
+    cmo: { n: '샹드 모멘텀 오실레이터 (CMO)', s: 'CMO', cat: 'mom', pane: 1, range: [-100, 100], lv: [50, 0, -50], in: [len(9), src()], plots: [['v', 'CMO', B]],
+      calc: (d, p) => { const c = chg(srcOf(d, p.src)), u = sum(c.map(x => fin(x) ? Math.max(x, 0) : NaN), p.len), l = sum(c.map(x => fin(x) ? Math.max(-x, 0) : NaN), p.len); return { v: map2(u, l, (a, b) => a + b === 0 ? 0 : 100 * (a - b) / (a + b)) }; } },
+    kst: { n: 'KST (노우 슈어 씽)', s: 'KST', cat: 'mom', pane: 1, lv: [0], in: [['sig', '시그널', 9]], plots: [['v', 'KST', '#009688'], ['s', '시그널', R, 'line', 1]],
+      calc: (d, p) => { const r = n => d.C.map((x, i) => i >= n ? 100 * (x - d.C[i - n]) / d.C[i - n] : NaN), a = sma(r(10), 10), b = sma(r(15), 10), c = sma(r(20), 10), e = sma(r(30), 15), v = a.map((x, i) => x + 2 * b[i] + 3 * c[i] + 4 * e[i]); return { v, s: sma(v, p.sig) }; } },
+    coppock: { n: '카포크 커브', s: 'Coppock', cat: 'mom', pane: 1, lv: [0], in: [['w', 'WMA 길이', 10], ['lr', '긴 ROC', 14], ['sr', '짧은 ROC', 11]], plots: [['v', 'Coppock', B]],
+      calc: (d, p) => { const r = n => d.C.map((x, i) => i >= n ? 100 * (x - d.C[i - n]) / d.C[i - n] : NaN); return { v: wma(map2(r(p.lr), r(p.sr), (a, b) => a + b), p.w) }; } },
+    fisher: { n: '피셔 트랜스폼', s: 'Fisher', cat: 'mom', pane: 1, lv: [1.5, 0, -1.5], in: [len(9)], plots: [['v', 'Fisher', B], ['t', '트리거', O, 'line', 1]],
+      calc: (d, p) => { const s = hl2(d), H = hh(s, p.len), L = ll(s, p.len), v = nan(d.N), t = nan(d.N); let val = 0, f = 0;
+        for (let i = 0; i < d.N; i++) { if (!fin(H[i])) continue; const r = H[i] === L[i] ? 0 : (s[i] - L[i]) / (H[i] - L[i]) - 0.5; val = Math.max(-0.999, Math.min(0.999, 0.66 * r + 0.67 * val)); t[i] = f; f = 0.5 * Math.log((1 + val) / (1 - val)) + 0.5 * f; v[i] = f; }
+        return { v, t }; } },
+    rvgi: { n: 'RVI (렐러티브 비고르 인덱스)', s: 'RVGI', cat: 'mom', pane: 1, prec: 4, lv: [0], in: [len(10)], plots: [['v', 'RVGI', G], ['s', '시그널', R, 'line', 1]],
+      calc: (d, p) => { const v = div(sum(swma(sub(d.C, d.O)), p.len), sum(swma(sub(d.H, d.L)), p.len)); return { v, s: swma(v) }; } },
+    crsi: { n: '코너즈 RSI', s: 'CRSI', cat: 'mom', pane: 1, range: [0, 100], lv: [70, 50, 30], in: [['r', 'RSI 길이', 3], ['u', '연속 상승·하락 길이', 2], ['k', 'ROC 길이', 100]], plots: [['v', 'CRSI', B]],
+      calc: (d, p) => { const st = nan(d.N); let s = 0; for (let i = 1; i < d.N; i++) { s = d.C[i] > d.C[i - 1] ? (s > 0 ? s + 1 : 1) : d.C[i] < d.C[i - 1] ? (s < 0 ? s - 1 : -1) : 0; st[i] = s; } st[0] = 0;
+        const r1 = d.C.map((x, i) => i ? 100 * (x - d.C[i - 1]) / d.C[i - 1] : NaN), pr = nan(d.N); for (let i = p.k + 1; i < d.N; i++) { let c = 0; for (let j = i - p.k; j < i; j++) if (r1[j] <= r1[i]) c++; pr[i] = 100 * c / p.k; }
+        const a = rsi(d.C, p.r), b = rsi(st, p.u); return { v: a.map((x, i) => (x + b[i] + pr[i]) / 3) }; } },
+    ppo: { n: '프라이스 오실레이터 (PPO)', s: 'PPO', cat: 'mom', pane: 1, lv: [0], in: [['fast', '짧은 길이', 12], ['slow', '긴 길이', 26], ['sig', '시그널', 9]], plots: [['h', '히스토그램', G, 'hist'], ['v', 'PPO', B], ['s', '시그널', O, 'line', 1]], hc: 'sign',
+      calc: (d, p) => { const a = ema(d.C, p.fast), b = ema(d.C, p.slow), v = map2(a, b, (x, y) => 100 * (x - y) / y), s = ema(v, p.sig); return { v, s, h: sub(v, s) }; } },
+    bop: { n: 'BOP (밸런스 오브 파워)', s: 'BOP', cat: 'mom', pane: 1, range: [-1, 1], lv: [0], in: [], plots: [['v', 'BOP', R]], calc: d => ({ v: d.C.map((c, i) => d.H[i] === d.L[i] ? 0 : (c - d.O[i]) / (d.H[i] - d.L[i])) }) },
+    // ---------------- 추세 강도 · 변동성 ----------------
+    adx: { n: 'ADX · DMI (평균방향성지수)', s: 'ADX', cat: 'trend', pane: 1, lv: [20], in: [['di', 'DI 길이', 14], ['adx', 'ADX 스무딩', 14]], plots: [['adx', 'ADX', R], ['p', '+DI', B, 'line', 1], ['m', '-DI', O, 'line', 1]],
+      calc: (d, p) => { const up = chg(d.H), dn = d.L.map((l, i) => i ? d.L[i - 1] - l : NaN), t = rma(tr(d), p.di);
+        const pl = div(rma(up.map((u, i) => !fin(u) ? NaN : u > dn[i] && u > 0 ? u : 0), p.di), t).map(x => 100 * x), mi = div(rma(dn.map((x, i) => !fin(x) ? NaN : x > up[i] && x > 0 ? x : 0), p.di), t).map(x => 100 * x);
+        return { p: pl, m: mi, adx: rma(map2(pl, mi, (a, b) => !fin(a) || !fin(b) ? NaN : 100 * Math.abs(a - b) / (a + b === 0 ? 1 : a + b)), p.adx) }; } },
+    vortex: { n: '보텍스 인디케이터', s: 'VI', cat: 'trend', pane: 1, prec: 4, in: [len(14)], plots: [['p', 'VI+', B], ['m', 'VI-', '#e91e63', 'line', 1]],
+      calc: (d, p) => { const t = sum(tr(d), p.len); return { p: div(sum(d.H.map((h, i) => i ? Math.abs(h - d.L[i - 1]) : NaN), p.len), t), m: div(sum(d.L.map((l, i) => i ? Math.abs(l - d.H[i - 1]) : NaN), p.len), t) }; } },
+    chop: { n: '차피니스 인덱스', s: 'CHOP', cat: 'volat', pane: 1, range: [0, 100], lv: [61.8, 50, 38.2], in: [len(14)], plots: [['v', 'CHOP', B]],
+      calc: (d, p) => { const t = sum(tr(d), p.len), H = hh(d.H, p.len), L = ll(d.L, p.len); return { v: t.map((x, i) => H[i] === L[i] ? NaN : 100 * Math.log10(x / (H[i] - L[i])) / Math.log10(p.len)) }; } },
+    atr: { n: 'ATR (애버리지 트루 레인지)', s: 'ATR', cat: 'volat', pane: 1, fmt: 'price', in: [len(14)], plots: [['v', 'ATR', '#b71c1c']], calc: (d, p) => ({ v: atr(d, p.len) }) },
+    bbw: { n: '볼린저 밴드 폭 (BBW)', s: 'BBW', cat: 'volat', pane: 1, in: [len(20), ['mult', '표준편차 배수', 2, { min: 0.1, step: 0.1 }], src()], plots: [['v', 'BBW %', '#138484']],
+      calc: (d, p) => { const s = srcOf(d, p.src), m = sma(s, p.len), sd = stdev(s, p.len); return { v: map2(m, sd, (a, b) => 100 * (2 * p.mult * b) / a) }; } },
+    bbp: { n: '볼린저 밴드 %B', s: '%B', cat: 'volat', pane: 1, lv: [1, 0.5, 0], in: [len(20), ['mult', '표준편차 배수', 2, { min: 0.1, step: 0.1 }], src()], plots: [['v', '%B', '#26a69a']],
+      calc: (d, p) => { const s = srcOf(d, p.src), m = sma(s, p.len), sd = stdev(s, p.len); return { v: s.map((x, i) => sd[i] === 0 ? NaN : (x - (m[i] - p.mult * sd[i])) / (2 * p.mult * sd[i])) }; } },
+    hv: { n: '과거 변동성 (HV)', s: 'HV', cat: 'volat', pane: 1, in: [len(10)], plots: [['v', 'HV %', B]],
+      calc: (d, p) => { const r = d.C.map((c, i) => i ? Math.log(c / d.C[i - 1]) : NaN), per = (d.tfSec || 86400) > 86400 ? 7 : 1; return { v: stdev(r, p.len).map(x => 100 * x * Math.sqrt(365 / per)) }; } },
+    stdev: { n: '표준편차', s: 'StDev', cat: 'volat', pane: 1, fmt: 'price', in: [len(20), src()], plots: [['v', 'StDev', '#138484']], calc: (d, p) => ({ v: stdev(srcOf(d, p.src), p.len) }) },
+    mass: { n: '매스 인덱스', s: 'Mass', cat: 'volat', pane: 1, lv: [27, 26.5], in: [len(10)], plots: [['v', 'Mass', B]], calc: (d, p) => { const s = sub(d.H, d.L), e = ema(s, 9); return { v: sum(div(e, ema(e, 9)), p.len) }; } },
+    relvol: { n: '상대 변동성 지수 (RVI)', s: 'RVI', cat: 'volat', pane: 1, range: [0, 100], lv: [80, 50, 20], in: [len(10), ['e', 'EMA 길이', 14]], plots: [['v', 'RVI', V]],
+      calc: (d, p) => { const sd = stdev(d.C, p.len), c = chg(d.C), u = ema(sd.map((x, i) => !fin(x) ? NaN : c[i] <= 0 ? 0 : x), p.e), l = ema(sd.map((x, i) => !fin(x) ? NaN : c[i] > 0 ? 0 : x), p.e); return { v: map2(u, l, (a, b) => a + b === 0 ? NaN : 100 * a / (a + b)) }; } },
+    chvol: { n: '체이킨 변동성', s: 'ChVol', cat: 'volat', pane: 1, lv: [0], in: [len(10), ['roc', '변화율 길이', 10]], plots: [['v', 'ChVol %', B]],
+      calc: (d, p) => { const e = ema(sub(d.H, d.L), p.len); return { v: e.map((x, i) => i >= p.roc ? 100 * (x - e[i - p.roc]) / e[i - p.roc] : NaN) }; } },
+    // ---------------- 거래량 ----------------
+    obv: { n: 'OBV (온밸런스 볼륨)', s: 'OBV', cat: 'vol', pane: 1, fmt: 'vol', in: [], plots: [['v', 'OBV', B]], calc: d => ({ v: cum(d.C.map((c, i) => i ? Math.sign(c - d.C[i - 1]) * d.V[i] : 0)) }) },
+    cmf: { n: 'CMF (체이킨 머니 플로우)', s: 'CMF', cat: 'vol', pane: 1, prec: 3, lv: [0], in: [len(20)], plots: [['v', 'CMF', '#43a047']], calc: (d, p) => ({ v: div(sum(mfv(d), p.len), sum(d.V, p.len)) }) },
+    adl: { n: '누적/분포 (A/D)', s: 'A/D', cat: 'vol', pane: 1, fmt: 'vol', in: [], plots: [['v', 'A/D', '#9e9d24']], calc: d => ({ v: cum(mfv(d)) }) },
+    chaikin: { n: '체이킨 오실레이터', s: 'Chaikin', cat: 'vol', pane: 1, fmt: 'vol', lv: [0], in: [['fast', '빠른 길이', 3], ['slow', '느린 길이', 10]], plots: [['v', 'Chaikin', '#ec407a']], calc: (d, p) => { const a = cum(mfv(d)); return { v: sub(ema(a, p.fast), ema(a, p.slow)) }; } },
+    pvt: { n: 'PVT (가격 거래량 트렌드)', s: 'PVT', cat: 'vol', pane: 1, fmt: 'vol', in: [], plots: [['v', 'PVT', B]], calc: d => ({ v: cum(d.C.map((c, i) => i ? (c - d.C[i - 1]) / d.C[i - 1] * d.V[i] : 0)) }) },
+    efi: { n: '엘더 포스 인덱스 (EFI)', s: 'EFI', cat: 'vol', pane: 1, fmt: 'vol', lv: [0], in: [len(13)], plots: [['v', 'EFI', '#b71c1c']], calc: (d, p) => ({ v: ema(d.C.map((c, i) => i ? (c - d.C[i - 1]) * d.V[i] : NaN), p.len) }) },
+    eom: { n: 'EOM (이즈 오브 무브먼트)', s: 'EOM', cat: 'vol', pane: 1, prec: 4, lv: [0], in: [len(14), ['dv', '나누는 수', 10000, { min: 1 }]], plots: [['v', 'EOM', '#43a047']],
+      calc: (d, p) => { const m = chg(hl2(d)); return { v: sma(m.map((x, i) => d.V[i] === 0 ? NaN : p.dv * x * (d.H[i] - d.L[i]) / d.V[i]), p.len) }; } },
+    netvol: { n: '순거래량 (Net Volume)', s: 'Net Vol', cat: 'vol', pane: 1, fmt: 'vol', in: [], plots: [['v', '순거래량', G, 'hist']], hc: 'sign', calc: d => ({ v: d.C.map((c, i) => i ? Math.sign(c - d.C[i - 1]) * d.V[i] : 0) }) },
+    volosc: { n: '볼륨 오실레이터', s: 'Vol Osc', cat: 'vol', pane: 1, lv: [0], in: [['fast', '짧은 길이', 5], ['slow', '긴 길이', 10]], plots: [['v', 'Vol Osc %', B]], calc: (d, p) => { const a = ema(d.V, p.fast), b = ema(d.V, p.slow); return { v: map2(a, b, (x, y) => y === 0 ? NaN : 100 * (x - y) / y) }; } },
+    klinger: { n: '클링거 오실레이터', s: 'Klinger', cat: 'vol', pane: 1, fmt: 'vol', lv: [0], in: [['fast', '빠른 길이', 34], ['slow', '느린 길이', 55], ['sig', '시그널', 13]], plots: [['v', 'KVO', B], ['s', '시그널', '#43a047', 'line', 1]],
+      calc: (d, p) => { const c = chg(hlc3(d)), sv = c.map((x, i) => !fin(x) ? NaN : x >= 0 ? d.V[i] : -d.V[i]), v = sub(ema(sv, p.fast), ema(sv, p.slow)); return { v, s: ema(v, p.sig) }; } },
+  };
+  const CATS = [['all', '전체'], ['mine', '기본 구성'], ['ma', '이동평균'], ['trend', '추세'], ['band', '밴드 · 채널'], ['mom', '모멘텀'], ['volat', '변동성'], ['vol', '거래량']];
+  return { S, CATS, fn: { sma, ema, rma, wma, hh, ll, stdev, sum, atr, tr, rsi, linreg } };
+})();
 
 // ============================================================
 // FibScan — 로그 피보 스크리너 (기존 fib_screener.html 엔진, 데이터 소스만 분리)
@@ -2048,6 +2304,178 @@ const DS = (() => {
 })();
 
 // ============================================================
+// icons.js — 종목 아이콘: 로고 이미지를 먼저 시도하고, 없으면 글자 동그라미
+// 크립토: CoinCap 아이콘 → cryptocurrency-icons(CC0) · 주식: Financial Modeling Prep 로고
+// ============================================================
+const ICON = (() => {
+  const dead = new Set();
+  try { for (const u of JSON.parse(sessionStorage.getItem('mc.iconDead') || '[]')) dead.add(u); } catch {}
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const CC = b => `https://assets.coincap.io/assets/icons/${b.toLowerCase()}@2x.png`;
+  const SP = b => `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/${b.toLowerCase()}.png`;
+  const FMP = t => `https://financialmodelingprep.com/image-stock/${encodeURIComponent(t)}.png`;
+  const coin = b => b.replace(/^(1000000|10000|1000|100|1M)(?=[A-Z0-9])/, '');
+  function info(key) {
+    const { src, id } = DS.parseKey(key);
+    if (src === 'binance' || src === 'spot') {
+      const s = DS.bx.syms.get(id), base = s?.base || id.replace(/(USDT|USDC|FDUSD|BUSD)$/, '');
+      if (s?.tradfi) return { t: base, u: [FMP(base)] };            // 주식·ETF 무기한 (금·은 등은 글자로)
+      const c = coin(base); return { t: c, u: [CC(c), SP(c)] };
+    }
+    if (src === 'crypto' || src === 'coinbase') { const b = id.replace(/USD$/, ''); return { t: b, u: [CC(b), SP(b)] }; }
+    if (/=F$|=X$|^\^/.test(id)) return { t: DS.label(key), u: [] };   // 선물·환율·지수
+    return { t: /^\d{6}\.K[SQ]$/.test(id) ? DS.label(key) : id, u: [FMP(id)] };
+  }
+  const hue = t => { let h = 0; for (const ch of String(t)) h = (h * 31 + ch.codePointAt(0)) % 360; return h; };
+  function html(key, cls = '') {
+    let x; try { x = info(key); } catch { x = { t: '?', u: [] }; }
+    const u = x.u.find(v => !dead.has(v));
+    return `<i class="tki${cls ? ' ' + cls : ''}" style="--tc:hsl(${hue(x.t)} 42% 42%)">${esc([...String(x.t)][0] || '?')}${u ? `<img class="tki-img" alt="" loading="lazy" decoding="async" src="${u}" data-k="${esc(key)}">` : ''}</i>`;
+  }
+  // 이미지가 없으면 다음 출처로, 다 없으면 글자만 남김 (error 이벤트는 위로 안 올라가서 capture로 받음)
+  document.addEventListener('error', e => {
+    const im = e.target; if (!im || im.tagName !== 'IMG' || !im.classList.contains('tki-img')) return;
+    dead.add(im.src); try { sessionStorage.setItem('mc.iconDead', JSON.stringify([...dead].slice(-800))); } catch {}
+    let next = null; try { next = info(im.dataset.k).u.find(v => !dead.has(v)); } catch {}
+    if (next) im.src = next; else im.remove();
+  }, true);
+  return { html, info };
+})();
+
+// ============================================================
+// orderbook.js — 호가·체결 (바이낸스 선물·현물 공개 웹소켓 · 키 없이 읽기만, 주문 기능 없음)
+// 호가: 처음에 1000단계 스냅샷을 받고 변경분을 이어 붙임 · 체결: aggTrade
+// ============================================================
+const OB = (() => {
+  const ROWS = 14, MAXT = 60;
+  let key = null, ep = null, el = null, stops = [], bids = new Map(), asks = new Map(), trades = [], timer = 0, dirty = false, state = '', lastId = 0, buf = null;
+  let opt = { g: 0, unit: 'usd', min: 0 };
+  try { opt = { ...opt, ...JSON.parse(localStorage.getItem('mc.ob') || '{}') }; } catch {}
+  const saveOpt = () => { try { localStorage.setItem('mc.ob', JSON.stringify(opt)); } catch {} };
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const fq = x => !isFinite(x) ? '-' : x >= 1e9 ? (x / 1e9).toFixed(2) + 'B' : x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : x >= 1e4 ? (x / 1e3).toFixed(1) + 'K' : x >= 100 ? x.toFixed(0) : x >= 1 ? x.toFixed(2) : x.toPrecision(3);
+  const decOf = step => { const s = String(+step.toPrecision(12)); if (s.includes('e-')) return +s.split('e-')[1]; const i = s.indexOf('.'); return i < 0 ? 0 : s.length - i - 1; };
+
+  function endpoints(k) {
+    if (!k) return null;
+    let { src, id } = DS.parseKey(k), note = '';
+    if (src === 'yahoo') { const a = DS.liveAlt(k); if (!a) return null; id = DS.parseKey(a.key).id; src = 'binance'; note = '바이낸스 ' + id + '.P 호가'; }
+    else if (src === 'crypto' || src === 'coinbase') { const p = DS.perpOf(k); if (!p) return null; id = p; src = 'binance'; note = '바이낸스 ' + id + '.P 호가'; }
+    const l = id.toLowerCase();
+    if (src === 'binance') return { id, note, fut: true, tick: DS.bx.syms.get(id)?.tick || 0, rest: `https://fapi.binance.com/fapi/v1/depth?symbol=${id}&limit=1000`,
+      depth: `wss://fstream.binance.com/public/ws/${l}@depth@100ms`, trade: `wss://fstream.binance.com/market/ws/${l}@aggTrade` };
+    if (src === 'spot') return { id, note, fut: false, tick: 0, rest: `https://api.binance.com/api/v3/depth?symbol=${id}&limit=1000`,
+      depth: `wss://stream.binance.com:9443/ws/${l}@depth@100ms`, trade: `wss://stream.binance.com:9443/ws/${l}@aggTrade` };
+    return null;
+  }
+  // 끊기면 다시 붙는 웹소켓
+  function sock(url, onMsg, onOpen) {
+    let ws = null, stopped = false, retry = 0, t = 0;
+    const open = () => {
+      if (stopped) return;
+      try { ws = new WebSocket(url); } catch { return; }
+      ws.onopen = () => { retry = 0; onOpen && onOpen(); };
+      ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
+      ws.onclose = () => { if (!stopped) t = setTimeout(open, Math.min(30000, 1000 * 2 ** retry++)); };
+      ws.onerror = () => { try { ws.close(); } catch {} };
+    };
+    open();
+    return () => { stopped = true; clearTimeout(t); try { ws && ws.close(); } catch {} };
+  }
+  function apply(m) {
+    const now = Date.now();
+    for (const [p, q] of m.b || []) { if (+q === 0) bids.delete(p); else bids.set(p, { q: +q, t: now }); }
+    for (const [p, q] of m.a || []) { if (+q === 0) asks.delete(p); else asks.set(p, { q: +q, t: now }); }
+    dirty = true;
+  }
+  async function snapshot(forKey) {
+    buf = buf || [];
+    try {
+      const r = await fetch(ep.rest); if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json(); if (forKey !== key) return;
+      const now = Date.now(); bids = new Map(); asks = new Map();
+      for (const [p, q] of j.bids) bids.set(p, { q: +q, t: now });
+      for (const [p, q] of j.asks) asks.set(p, { q: +q, t: now });
+      lastId = j.lastUpdateId || 0;
+      if (!ep.tick) { const ps = j.bids.slice(0, 200).map(x => +x[0]); let m = Infinity; for (let i = 1; i < ps.length; i++) { const dd = Math.abs(ps[i - 1] - ps[i]); if (dd > 0 && dd < m) m = dd; } ep.tick = isFinite(m) ? +m.toPrecision(6) : 0.01; }
+      const q = buf; buf = null; for (const m of q) if (!m.u || m.u > lastId) apply(m);
+      state = ''; dirty = true;
+    } catch (e) { if (forKey !== key) return; buf = null; state = '호가를 불러오지 못했습니다 (' + e.message + '). 30초 뒤 다시 시도합니다.'; dirty = true; }
+  }
+  function start(k) {
+    el = document.getElementById('obPanel'); if (!el) return;
+    if (k === key && stops.length) { dirty = true; return; }
+    stop(); key = k; ep = endpoints(k); bids = new Map(); asks = new Map(); trades = []; lastId = 0;
+    if (!ep) { el.innerHTML = '<div class="empty">이 종목은 호가·체결을 볼 수 없습니다.<br>바이낸스 선물·현물 종목에서 볼 수 있습니다.</div>'; return; }
+    state = '호가 불러오는 중…'; buf = [];
+    const mine = k;
+    stops.push(sock(ep.depth, m => { if (mine !== key || m.e !== 'depthUpdate') return; if (buf) buf.push(m); else apply(m); }, () => { if (mine === key && lastId) snapshot(mine); }));
+    stops.push(sock(ep.trade, m => {
+      if (mine !== key || m.e !== 'aggTrade') return;
+      const tr = { p: +m.p, q: +m.q, t: m.T, sell: !!m.m };
+      trades.unshift(tr); if (trades.length > 400) trades.length = 400;
+      dirty = true;
+    }));
+    snapshot(mine);
+    let snapAt = Date.now();
+    const resync = setInterval(() => { if (mine !== key || document.hidden) return; if (state || Date.now() - snapAt > 120000) { snapAt = Date.now(); snapshot(mine); } }, 30000);
+    stops.push(() => clearInterval(resync));
+    timer = setInterval(() => { const a = document.activeElement; if (dirty && !document.hidden && el && !el.hidden && !(a && a.tagName === 'SELECT' && el.contains(a))) { dirty = false; render(); } }, 200);
+    render();
+  }
+  function stop() { for (const f of stops) try { f(); } catch {} stops = []; clearInterval(timer); timer = 0; key = null; buf = null; }
+
+  const STEPS = [1, 10, 100, 1000];
+  function levels() {
+    const tick = ep.tick || 0.01, step = tick * STEPS[opt.g], inv = 1 / step;
+    const agg = (map, up) => { const o = new Map(); for (const [p, v] of map) { const k = (up ? Math.ceil(+p * inv - 1e-9) : Math.floor(+p * inv + 1e-9)); o.set(k, (o.get(k) || 0) + v.q); } return o; };
+    // 놓친 변경분으로 남은 엇갈린 호가는 오래된 쪽을 지움
+    let bb = -Infinity, ba = Infinity, bbK = null, baK = null;
+    for (let guard = 0; guard < 50; guard++) {
+      bb = -Infinity; ba = Infinity;
+      for (const p of bids.keys()) if (+p > bb) { bb = +p; bbK = p; }
+      for (const p of asks.keys()) if (+p < ba) { ba = +p; baK = p; }
+      if (!(bb >= ba)) break;
+      if (bids.get(bbK).t <= asks.get(baK).t) bids.delete(bbK); else asks.delete(baK);
+    }
+    const B = [...agg(bids, false)].sort((a, b) => b[0] - a[0]).slice(0, ROWS).map(([k, q]) => ({ p: k * step, q }));
+    const A = [...agg(asks, true)].sort((a, b) => a[0] - b[0]).slice(0, ROWS).map(([k, q]) => ({ p: k * step, q }));
+    return { B, A, bb, ba, step, tick };
+  }
+  function render() {
+    if (!el || !ep) return;
+    const { B, A, bb, ba, step, tick } = levels(), dec = decOf(step), tdec = decOf(tick), usd = opt.unit === 'usd';
+    const fpx = (p, d = dec) => p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const amt = (p, q) => fq(usd ? p * q : q);
+    let cb = 0, ca = 0; for (const x of B) { cb += usd ? x.p * x.q : x.q; x.c = cb; } for (const x of A) { ca += usd ? x.p * x.q : x.q; x.c = ca; }
+    const mx = Math.max(cb, ca) || 1;
+    const row = (x, side) => `<div class="ob-r ${side}"><i style="width:${(x.c / mx * 100).toFixed(1)}%"></i><span class="p">${fpx(x.p)}</span><span>${amt(x.p, x.q)}</span><span>${fq(x.c)}</span></div>`;
+    const last = trades[0], prev = trades.find(t => t.p !== last?.p), dir = last && prev ? (last.p > prev.p ? 1 : -1) : 0;
+    const tot = cb + ca, bp = tot ? Math.round(cb / tot * 100) : 50;
+    const coin = ep.id.replace(/USDT$|USDC$/, '');
+    const lim = opt.min, shown = (lim ? trades.filter(t => t.p * t.q >= lim) : trades).slice(0, MAXT);
+    const tm = t => { const d = new Date(t), z = n => String(n).padStart(2, '0'); return z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds()); };
+    const sel = (id, v, list) => `<select data-o="${id}">${list.map(([a, b]) => `<option value="${a}"${String(a) === String(v) ? ' selected' : ''}>${b}</option>`).join('')}</select>`;
+    const spread = isFinite(bb) && isFinite(ba) ? ba - bb : NaN;
+    el.innerHTML = `<div class="ob-h"><b>호가</b>${sel('g', opt.g, STEPS.map((m, i) => [i, fpx(tick * m, decOf(tick * m))]))}
+        <span class="ob-u"><button data-u="coin"${usd ? '' : ' class="on"'}>${esc(coin)}</button><button data-u="usd"${usd ? ' class="on"' : ''}>USDT</button></span></div>
+      ${ep.note ? `<div class="ob-note">${esc(ep.note)}</div>` : ''}${state ? `<div class="ob-note">${esc(state)}</div>` : ''}
+      <div class="ob-th"><span>가격</span><span>${usd ? '금액' : '수량'}</span><span>누적</span></div>
+      <div class="ob-a">${A.slice().reverse().map(x => row(x, 'a')).join('')}</div>
+      <div class="ob-mid"><b class="${dir > 0 ? 'pos' : dir < 0 ? 'neg' : ''}">${last ? fpx(last.p, tdec) + (dir > 0 ? ' ↑' : dir < 0 ? ' ↓' : '') : '-'}</b>
+        <span class="dim">스프레드 ${isFinite(spread) ? fpx(spread, tdec) : '-'}</span>
+        <span class="ob-ratio" title="보이는 ${ROWS}단계 매수·매도 잔량 비율"><i style="width:${bp}%"></i><em>매수 ${bp}%</em><em>매도 ${100 - bp}%</em></span></div>
+      <div class="ob-b">${B.map(x => row(x, 'b')).join('')}</div>
+      <div class="ob-h"><b>체결</b>${sel('min', opt.min, [[0, '전체'], [10000, '1만 USDT 이상'], [100000, '10만 USDT 이상'], [1000000, '100만 USDT 이상']])}</div>
+      <div class="ob-th"><span>시각</span><span>가격</span><span>${usd ? '금액' : '수량'}</span></div>
+      <div class="ob-t">${shown.length ? shown.map(t => `<div class="ob-tr${t.p * t.q >= 100000 ? ' big' : ''}"><span>${tm(t.t)}</span><span class="${t.sell ? 'neg' : 'pos'}">${fpx(t.p, tdec)}</span><span>${amt(t.p, t.q)}</span></div>`).join('') : `<div class="empty">${lim ? '기준 이상 체결이 아직 없습니다.' : '체결 기다리는 중…'}</div>`}</div>`;
+  }
+  document.addEventListener('change', e => { const s = e.target.closest && e.target.closest('#obPanel select[data-o]'); if (!s) return; opt[s.dataset.o] = +s.value; saveOpt(); s.blur(); if (ep) render(); });
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#obPanel [data-u]'); if (!b) return; opt.unit = b.dataset.u; saveOpt(); render(); });
+  return { start, stop, endpoints, get key() { return key; } };
+})();
+
+// ============================================================
 // chart.js — 차트 화면 (TradingView Lightweight Charts v5 위에 지표·그리기 도구)
 // ============================================================
 const CH = (() => {
@@ -3147,6 +3575,59 @@ const CH = (() => {
       },
     },
   };
+  // ---------------- 지표 팩 → TYPES (PACK.S 정의를 차트 지표로 등록) ----------------
+  function packType(key, s) {
+    const inputs = s.in.map(([k, l, def, o = {}]) => o.o ? { k, l, t: 'sel', o: o.o } : typeof def === 'boolean' ? { k, l, t: 'bool' } : { k, l, t: 'num', min: o.min ?? 1, max: o.max, step: o.step });
+    const defaults = Object.fromEntries(s.in.map(([k, , def]) => [k, def]));
+    if (!s.quiet) s.plots.forEach((pl, i) => { inputs.push({ k: 'c' + i, l: pl[1] + ' 색', t: 'color' }); defaults['c' + i] = pl[2]; });
+    const nums = s.in.filter(([, , def]) => typeof def === 'number').map(([k]) => k);
+    const own = s.fmt === 'price' || !s.pane;   // 가격 단위로 표시
+    return {
+      name: s.n, desc: (s.pane ? '아래 패널' : '가격 위') + ' · 트레이딩뷰 기본 지표와 같은 공식', pane: !!s.pane, multi: true, cat: s.cat, inputs, defaults,
+      title: i => (s.s + ' ' + nums.map(k => i.p[k]).join(' ')).trim(),
+      create(env, inst) {
+        const P = inst.p, pr = own ? S.prec : s.prec ?? 2;
+        const pf = s.fmt === 'vol' ? { type: 'volume' } : { type: 'price', precision: pr, minMove: +(10 ** -pr).toFixed(pr) };
+        const fmt = x => s.fmt === 'vol' ? fv(x) : own ? fp(x) : f2(x, pr);
+        const col = i => P['c' + i] || s.plots[i][2];
+        const rng = s.range ? { autoscaleInfoProvider: () => ({ priceRange: { minValue: s.range[0], maxValue: s.range[1] } }) } : {};
+        const ser = s.plots.map((pl, i) => {
+          const t = pl[3] || 'line';
+          if (t === 'hist') return chart.addSeries(LW().HistogramSeries, { color: alpha(col(i), 0.6), priceFormat: pf, priceLineVisible: false, lastValueVisible: false }, env.pane);
+          const o = lineOpts(col(i), pl[4] || 2, { priceFormat: pf, lastValueVisible: s.pane ? i === 0 : !!cfg.indLabels && !s.quiet,
+            ...(t === 'dots' ? { lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 1.5 } : {}), ...(t === 'dash' ? { lineStyle: 2 } : {}), ...rng });
+          return chart.addSeries(LW().LineSeries, s.pane ? o : ov(o), env.pane);
+        });
+        if (s.lv) for (const v of s.lv) ser[0].createPriceLine({ price: v, color: C.muted(), lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
+        let out = {};
+        return {
+          fill() {
+            out = s.calc({ T: D.T, O: D.O, H: D.H, L: D.L, C: D.C, V: D.V, N: D.N, tfSec: DS.TF_SEC[S.tf] }, P);
+            const ok = v => isFinite(v) && (s.pane || cfg.scale !== 'log' || v > 0);
+            const up = C.up(), dn = C.dn();
+            s.plots.forEach((pl, i) => {
+              const a = out[pl[0]] || [], t = pl[3] || 'line', sh = pl[5] ? Math.round(pl[5](P)) || 0 : 0, pts = [];
+              const gaps = t === 'line' || t === 'dash';   // 선은 빈 값에서 끊어 그림
+              let started = false;
+              for (let j = 0; j < a.length; j++) {
+                if (j + sh < 0) continue;
+                const time = sh ? Math.round(timeOf(j + sh)) : D.T[j];
+                if (ok(a[j])) {
+                  started = true;
+                  if (t === 'hist' && s.hc) pts.push({ time, value: a[j], color: alpha((s.hc === 'sign' ? a[j] >= 0 : a[j] >= (isFinite(a[j - 1]) ? a[j - 1] : a[j])) ? up : dn, 0.7) });
+                  else pts.push({ time, value: a[j] });
+                } else if (started && gaps) pts.push({ time });
+              }
+              ser[i].setData(pts);
+            });
+          },
+          values: i => s.quiet ? [] : s.plots.map((pl, k) => ({ c: col(k), t: fmt(out[pl[0]]?.[i]) })),
+        };
+      },
+    };
+  }
+  for (const [k, s] of Object.entries(PACK.S)) if (!TYPES[k]) TYPES[k] = packType(k, s);
+
   const DEFAULT_LAYOUT = () => [
     mkInst('vol'), mkInst('ema', { len: 450, color: '#3b82f6' }), mkInst('ma', { len: 450, color: '#f0b429' }),
     mkInst('ema', { len: 2000, color: '#a855f7' }), mkInst('ma', { len: 2000, color: '#ec4899' }),
@@ -3683,7 +4164,7 @@ const UI = (() => {
     };
     const paint = () => {
       items = filt === 'all' ? all : all.filter(x => kindOf(x) === filt); if (act >= items.length) act = 0;
-      list.innerHTML = items.length ? items.map((x, i) => `<div class="sr${i === act ? ' act' : ''}" data-i="${i}"><b>${esc(x.label)}</b><span>${esc(x.name || '')}</span><em>${esc(x.exch || '')}</em>
+      list.innerHTML = items.length ? items.map((x, i) => `<div class="sr${i === act ? ' act' : ''}" data-i="${i}"><b>${x.key ? ICON.html(x.key, 'sm') : ''}${esc(x.label)}</b><span>${esc(x.name || '')}</span><em>${esc(x.exch || '')}</em>
         <button class="addst${inList(x.key) ? ' on' : ''}" data-add="${i}" title="관심목록에 추가">${inList(x.key) ? '★' : '☆'}</button></div>`).join('')
         : `<div class="empty">${inp.value ? (all.length ? '이 종류에는 없음' : '찾는 중…') : '종목 코드나 이름을 입력하세요'}</div>`;
       list.querySelector('.sr.act')?.scrollIntoView({ block: 'nearest' });
@@ -3749,11 +4230,15 @@ const UI = (() => {
     $('nDisc').textContent = disc.rows.length ? ' ' + disc.rows.length : '';
     $('wlHead').hidden = ST.sideTab !== 'wl';
     const head = $('listHead'), list = $('list');
+    const isOb = ST.sideTab === 'ob';
+    $('obPanel').hidden = !isOb; head.hidden = isOb; list.hidden = isOb;
+    if (isOb) { OB.start(ST.key); return; }
+    OB.stop();
     const rowHtml = (key, small, third, extra = '') => {
       const alt = key.startsWith('YAHOO:') && DS.srv.ok !== true ? DS.liveAlt(key) : null, pk = alt ? alt.key : key;
       const cur = key === ST.key || pk === ST.key;
       const fav = favList() && favList().items.includes(key);
-      return `<div class="row${cur ? ' cur' : ''}${extra.includes('data-i=') && selI.has(+extra.match(/data-i="(\d+)"/)[1]) ? ' sel' : ''}" data-key="${esc(key)}" data-pk="${esc(pk)}"${extra}><span class="s"><b>${fav ? '<i class="favst">★</i>' : ''}${esc(DS.label(key))}${alt ? ' <i class="zap" title="바이낸스 실시간으로 표시">⚡</i>' : ''}</b><small>${esc(alt ? DS.parseKey(alt.key).id + '.P 실시간' : small)}</small></span>
+      return `<div class="row${cur ? ' cur' : ''}${extra.includes('data-i=') && selI.has(+extra.match(/data-i="(\d+)"/)[1]) ? ' sel' : ''}" data-key="${esc(key)}" data-pk="${esc(pk)}"${extra}>${ICON.html(pk)}<span class="s"><b>${fav ? '<i class="favst">★</i>' : ''}${esc(DS.label(key))}${alt ? ' <i class="zap" title="바이낸스 실시간으로 표시">⚡</i>' : ''}</b><small>${esc(alt ? DS.parseKey(alt.key).id + '.P 실시간' : small)}</small></span>
       <span class="num p">${fpx(px[pk]?.price)}</span><span class="num c">${alt ? chgHtml(pk) : third}</span>${ST.sideTab === 'wl' ? '<button class="x" title="목록에서 빼기">×</button>' : ''}</div>`;
     };
     if (ST.sideTab === 'wl') {
@@ -4155,7 +4640,7 @@ const UI = (() => {
     }
     ST.key = key; if (tab) ST.sideTab = tab; save();
     setView(ST.view === 'tv' ? 'tv' : 'chart');
-    $('symLbl').textContent = DS.label(key); paintStar();
+    $('symLbl').textContent = DS.label(key); $('symIco').innerHTML = ICON.html(key, 'sm'); paintStar();
     document.title = `${DS.label(key)} · 나만의 차트`;
     CH.load(key, ST.tf);
     renderList(); renderDetail(true);
@@ -4198,13 +4683,16 @@ const UI = (() => {
   // ---------------- 지표 대화상자 ----------------
   function indicatorDialog(inst) {
     if (!inst) {
-      const d = openDlg(`<div class="in"><header>지표<button class="ib" data-x>✕</button></header><div class="body"><input id="iq" placeholder="지표 검색">
+      const d = openDlg(`<div class="in"><header>지표<button class="ib" data-x>✕</button></header><div class="body"><input id="iq" placeholder="지표 검색 (이름 · 영문 약자)">
+        <div class="srf" id="icat">${PACK.CATS.map(([k, n]) => `<button type="button" data-c="${k}"${k === 'all' ? ' class="on"' : ''}>${n}</button>`).join('')}</div>
         <div id="il"></div><div class="dim" style="font-size:11.5px">추가한 지표는 차트 왼쪽 위 범례에서 숨기기 · 설정 · 지우기를 할 수 있습니다 (범례 이름을 두 번 누르면 설정). 지표 구성은 모든 종목에 똑같이 적용됩니다.</div></div>
         <footer><button class="btn left" id="iReset">기본 구성으로 되돌리기</button><button class="btn" data-x>닫기</button></footer></div>`);
-      const paint = q => d.querySelector('#il').innerHTML = Object.entries(CH.TYPES).filter(([k, t]) => !q || (t.name + t.desc).toLowerCase().includes(q.toLowerCase()))
+      let icat = 'all';
+      const paint = q => d.querySelector('#il').innerHTML = Object.entries(CH.TYPES).filter(([k, t]) => q ? (t.name + t.desc + k).toLowerCase().includes(q.toLowerCase()) : icat === 'all' || (icat === 'mine' ? !t.cat : t.cat === icat))
         .map(([k, t]) => `<div class="ind-item" data-t="${k}"><b>${esc(t.name)}</b><span>${esc(t.desc)}${CH.layout.some(x => x.type === k) ? ' · 추가됨' : ''}</span></div>`).join('');
       paint('');
       d.querySelector('#iq').oninput = e => paint(e.target.value);
+      d.querySelector('#icat').onclick = e => { const b = e.target.closest('button[data-c]'); if (!b) return; icat = b.dataset.c; d.querySelectorAll('#icat button').forEach(x => x.classList.toggle('on', x === b)); d.querySelector('#iq').value = ''; paint(''); };
       d.querySelector('#il').onclick = e => { const it = e.target.closest('.ind-item'); if (!it) return; CH.addIndicator(it.dataset.t); toast(CH.TYPES[it.dataset.t].name + ' 추가'); paint(d.querySelector('#iq').value); };
       d.querySelector('#iReset').onclick = async () => { d.close(); if (await confirmBox('기본 구성', '지표를 처음 구성(거래량, EMA·MA 450/2000, NWE, TD, 겹침 구간)으로 되돌립니다.')) CH.resetLayout(); };
       d.querySelector('#iq').focus();
