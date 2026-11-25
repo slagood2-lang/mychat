@@ -2216,11 +2216,13 @@ const DS = (() => {
       wakeSubs.add(wake);
       return { kind: '실시간', stop() { stopped = true; clearTimeout(timer); clearInterval(dog); wakeSubs.delete(wake); try { ws && ws.close(); } catch {} } };
     }
-    const ticks = (src === 'coinbase' || src === 'crypto') && tf !== '1y';
-    const every = tf === '1y' ? 300000 : src === 'binance' ? 60000 : ticks ? 15000 : 30000;
+    const usSym = src === 'yahoo' && tf !== '1y' && USRT.on() ? USRT.symOf(key) : null;   // 미국 주식 + Finnhub 키
+    const ticks = ((src === 'coinbase' || src === 'crypto') && tf !== '1y') || !!usSym;
+    const every = tf === '1y' ? 300000 : src === 'binance' ? 60000 : src === 'yahoo' ? 30000 : ticks ? 15000 : 30000;
     // 체결로 지금 봉을 바로 고침. 봉 자체(시가·거래량·새 봉)는 주기적으로 받은 것이 기준
     let cur = null, stopTicks = null, pend = null, flushT = 0;
-    const step = (TF_SEC[tf] || 0) * 1000, fixed = step && !['3d', '1w', '1M'].includes(tf);
+    // 야후 1시간·일봉은 시작 시각이 정시가 아니라(9:30 등) 새 봉은 체결로 만들지 않고 다음 봉 받기를 기다림
+    const step = (TF_SEC[tf] || 0) * 1000, fixed = step && !['3d', '1w', '1M'].includes(tf) && !(usSym && step > 1800000);
     const flush = () => { flushT = 0; if (!stopped && pend) { const b = pend; pend = null; onBars([b.slice()]); } };
     const onTick = (p, t, q) => {
       if (stopped || !cur) return;
@@ -2245,11 +2247,11 @@ const DS = (() => {
       } catch (e) { console.warn('poll', key, e.message); }
       if (!stopped) timer = setTimeout(poll, every);
     };
-    if (ticks) { poll(true); stopTicks = tickFeed(src, id, onTick); }
+    if (ticks) { poll(true); stopTicks = usSym ? USRT.sub(usSym, (p, t, q) => { if (USRT.regular(t)) onTick(p, t, q); }) : tickFeed(src, id, onTick); }
     else timer = setTimeout(poll, every);
     const wake = () => { clearTimeout(timer); poll(); };
     wakeSubs.add(wake);
-    return { kind: src === 'binance' ? '1분마다' : ticks ? '실시간' : '30초마다 (지연 가능)',
+    return { kind: src === 'binance' ? '1분마다' : ticks ? '실시간' : '30초마다 (지연 가능)', feed: usSym ? 'finnhub' : null,
       stop() { stopped = true; clearTimeout(timer); clearTimeout(flushT); wakeSubs.delete(wake); stopTicks && stopTicks(); } };
   }
 
@@ -2301,6 +2303,123 @@ const DS = (() => {
   return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
     resolveSync, resolve, search, localSearch, klines, cachedKlines, recent, streamKline, streamTickers, binanceTickers, yahooQuotes,
     cgMarkets, cgTrending, KR_NAMES };
+})();
+
+// ============================================================
+// usrt.js — 미국 주식 실시간 체결 (Finnhub 웹소켓 · 내 무료 키)
+// 키는 이 브라우저(localStorage 'mc.finnhubKey')에만 저장 · 백업 파일·저장소에 안 들어감
+// 무료 키: 웹소켓 동시 50종목 · REST 분당 60회 · 개인 용도
+// ============================================================
+const USRT = (() => {
+  const LS = 'mc.finnhubKey', MAX = 50, WSU = 'wss://ws.finnhub.io', API = 'https://finnhub.io/api/v1';
+  let token = ''; try { token = localStorage.getItem(LS) || ''; } catch {}
+  let ws = null, retry = 0, timer = 0, idleT = 0, lastMsg = 0, status = token ? 'idle' : 'off', err = '', trades = 0, lastAt = 0;
+  const subs = new Map(), sent = new Set(), listeners = new Set();
+  const say = () => { for (const f of listeners) try { f(status); } catch {} };
+  // YAHOO:AAPL · YAHOO:BRK-B → Finnhub 기호 (선물·지수·환율·한국 주식은 제외)
+  function symOf(key) {
+    if (!key || !key.startsWith('YAHOO:')) return null;
+    const id = key.slice(6);
+    return /^[A-Z]{1,5}(-[A-Z])?$/.test(id) ? id.replace('-', '.') : null;
+  }
+  const on = () => !!token;
+  // 뉴욕 정규장(09:30~16:00) 체결인지. PC 서버 봉이 정규장만이라 차트는 정규장 체결만 반영
+  const NY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', weekday: 'short', hourCycle: 'h23' });
+  function regular(ms) {
+    const p = {}; for (const x of NY.formatToParts(new Date(ms))) p[x.type] = x.value;
+    if (p.weekday === 'Sat' || p.weekday === 'Sun') return false;
+    const m = +p.hour * 60 + +p.minute; return m >= 570 && m < 960;
+  }
+  const send = o => { try { ws && ws.readyState === 1 && ws.send(JSON.stringify(o)); } catch {} };
+  function sync() {
+    if (!ws || ws.readyState !== 1) return;
+    const want = new Set([...subs.keys()].slice(0, MAX));
+    for (const s of [...sent]) if (!want.has(s)) { send({ type: 'unsubscribe', symbol: s }); sent.delete(s); }
+    for (const s of want) if (!sent.has(s)) { send({ type: 'subscribe', symbol: s }); sent.add(s); }
+  }
+  function open() {
+    clearTimeout(timer);
+    if (!token || ws || !subs.size) return;
+    status = 'connecting'; say();
+    try { ws = new WebSocket(`${WSU}?token=${encodeURIComponent(token)}`); } catch (e) { status = 'error'; err = e.message; say(); return; }
+    const me = ws; let opened = false;
+    me.onopen = () => { if (me !== ws) return; opened = true; lastMsg = Date.now(); sent.clear(); status = 'on'; err = ''; say(); sync(); };
+    me.onmessage = e => {
+      if (me !== ws) return;
+      lastMsg = Date.now(); let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === 'trade' && Array.isArray(m.data)) {
+        retry = 0;
+        for (const d of m.data) { const set = subs.get(d.s); if (!set || !(+d.p > 0)) continue; trades++; lastAt = +d.t || Date.now(); for (const cb of set) try { cb(+d.p, +d.t || Date.now(), +d.v || 0); } catch {} }
+      } else if (m.type === 'error') { err = String(m.msg || '오류'); status = 'error'; say(); }
+    };
+    me.onclose = () => {
+      if (me !== ws) return; ws = null; sent.clear();
+      if (!token || !subs.size) { status = token ? 'idle' : 'off'; say(); return; }
+      // 연결 자체가 계속 거절되면(키 오류·같은 키로 다른 기기 연결 등) 오류로 알림. 다시 시도는 계속함
+      if (!opened && retry >= 2) { status = 'error'; err = '실시간 연결이 계속 거절됩니다 (키 확인 · 같은 키를 다른 기기/탭에서 쓰는 중인지 확인)'; say(); }
+      else if (status !== 'error') { status = 'connecting'; say(); }
+      timer = setTimeout(open, Math.min(60000, 2000 * 2 ** retry++));
+    };
+    me.onerror = () => { try { me.close(); } catch {} };
+  }
+  function close() { clearTimeout(timer); const w = ws; ws = null; sent.clear(); try { w && w.close(); } catch {} }
+  // 거래 시간 밖엔 체결이 없으니 오래 조용해도 정상. 대신 탭이 다시 보이면 연결 상태만 확인
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && token && subs.size && (!ws || ws.readyState > 1)) { retry = 0; open(); } });
+  // cb(가격, 시각ms, 수량) · 돌려준 함수를 부르면 해지
+  function sub(sym, cb) {
+    if (!sym || !token) return () => {};
+    clearTimeout(idleT);
+    let set = subs.get(sym); if (!set) subs.set(sym, set = new Set());
+    set.add(cb);
+    if (ws) sync(); else open();
+    return () => {
+      const s = subs.get(sym); if (!s) return; s.delete(cb);
+      if (!s.size) { subs.delete(sym); sync(); }
+      if (!subs.size) { clearTimeout(idleT); idleT = setTimeout(() => { if (!subs.size) { close(); status = token ? 'idle' : 'off'; say(); } }, 30000); }
+    };
+  }
+  // REST 현재가: 분당 60회 한도라 1.1초 간격 줄 세우기 · 20초 캐시
+  const qc = new Map(); let q = Promise.resolve(), lastCall = 0;
+  function quote(sym, tk = token) {
+    const c = qc.get(sym); if (c && Date.now() - c.at < 20000 && tk === token) return Promise.resolve(c.v);
+    const job = q.then(async () => {
+      const wait = lastCall + 1100 - Date.now(); if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      lastCall = Date.now();
+      const r = await fetch(`${API}/quote?symbol=${encodeURIComponent(sym)}&token=${encodeURIComponent(tk)}`);
+      if (r.status === 401 || r.status === 403) throw new Error('키가 맞지 않거나 이 자료를 볼 수 없는 요금제입니다 (' + r.status + ')');
+      if (r.status === 429) throw new Error('요청 한도 초과 (분당 60회). 잠시 뒤 다시 됩니다');
+      if (!r.ok) throw new Error('Finnhub ' + r.status);
+      const j = await r.json();
+      if (!(j && +j.c > 0)) throw new Error(sym + ' 시세 없음');
+      const v = { price: +j.c, prev: +j.pc || null, chgPct: +j.pc ? (j.c / j.pc - 1) * 100 : null, at: (+j.t || 0) * 1000 };
+      if (tk === token) qc.set(sym, { at: Date.now(), v });
+      return v;
+    });
+    q = job.catch(() => {});
+    return job;
+  }
+  // 키 확인: REST 한 번 + 웹소켓으로 SPY 체결을 최대 waitMs 기다림 (장 밖이면 체결이 없을 수 있음)
+  async function test(tk, waitMs = 8000) {
+    const out = { rest: null, ws: null, trade: null };
+    try { const v = await quote('SPY', tk); out.rest = 'SPY ' + v.price; } catch (e) { out.rest = '✗ ' + e.message; return out; }
+    out.ws = await new Promise(res => {
+      let w, done = false; const fin = v => { if (done) return; done = true; try { w.close(); } catch {} res(v); };
+      try { w = new WebSocket(`${WSU}?token=${encodeURIComponent(tk)}`); } catch (e) { return fin('✗ ' + e.message); }
+      w.onopen = () => { w.send(JSON.stringify({ type: 'subscribe', symbol: 'SPY' })); setTimeout(() => fin('연결됨 · 체결 없음 (장 밖이거나 조용함)'), waitMs); };
+      w.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m.type === 'trade' && m.data && m.data[0]) { out.trade = m.data[0]; fin('연결됨 · 체결 받음'); } else if (m.type === 'error') fin('✗ ' + m.msg); };
+      w.onerror = () => fin('✗ 웹소켓 연결 실패');
+      setTimeout(() => fin('✗ 응답 없음'), waitMs + 4000);
+    });
+    return out;
+  }
+  function setToken(tk) {
+    token = String(tk || '').trim(); qc.clear(); err = '';
+    try { token ? localStorage.setItem(LS, token) : localStorage.removeItem(LS); } catch {}
+    close(); status = token ? 'idle' : 'off'; say();
+    if (token && subs.size) open();
+  }
+  return { symOf, on, sub, quote, regular, test, setToken, onStatus: f => listeners.add(f),
+    get status() { return status; }, get err() { return err; }, get count() { return subs.size; }, get trades() { return trades; }, get lastAt() { return lastAt; }, MAX };
 })();
 
 // ============================================================
@@ -4235,7 +4354,7 @@ const UI = (() => {
     if (isOb) { OB.start(ST.key); return; }
     OB.stop();
     const rowHtml = (key, small, third, extra = '') => {
-      const alt = key.startsWith('YAHOO:') && DS.srv.ok !== true ? DS.liveAlt(key) : null, pk = alt ? alt.key : key;
+      const alt = key.startsWith('YAHOO:') && DS.srv.ok !== true && !(USRT.on() && USRT.symOf(key)) ? DS.liveAlt(key) : null, pk = alt ? alt.key : key;
       const cur = key === ST.key || pk === ST.key;
       const fav = favList() && favList().items.includes(key);
       return `<div class="row${cur ? ' cur' : ''}${extra.includes('data-i=') && selI.has(+extra.match(/data-i="(\d+)"/)[1]) ? ' sel' : ''}" data-key="${esc(key)}" data-pk="${esc(pk)}"${extra}>${ICON.html(pk)}<span class="s"><b>${fav ? '<i class="favst">★</i>' : ''}${esc(DS.label(key))}${alt ? ' <i class="zap" title="바이낸스 실시간으로 표시">⚡</i>' : ''}</b><small>${esc(alt ? DS.parseKey(alt.key).id + '.P 실시간' : small)}</small></span>
@@ -4551,6 +4670,29 @@ const UI = (() => {
       try { Object.assign(px, await DS.yahooQuotes(keys)); paintPrices(); renderDetail(); } catch (e) { console.warn('quotes', e.message); }
     }
     pollT = setTimeout(pollYahoo, 60000);
+    syncUS();
+  }
+  // 미국 주식 체결 실시간 (Finnhub): 보이는 목록 + 지금 차트 중 앞 50종목
+  const usSubs = new Map(); let usPaintT = 0, usSeedT = 0;
+  const usPaint = () => { if (usPaintT) return; usPaintT = setTimeout(() => { usPaintT = 0; paintPrices(); renderDetail(); }, 400); };
+  function syncUS() {
+    const want = new Map();
+    if (USRT.on()) for (const k of [ST.key, ...sideItems()]) { const s = USRT.symOf(k); if (s && !want.has(k) && want.size < USRT.MAX) want.set(k, s); }
+    for (const [k, off] of usSubs) if (!want.has(k)) { off(); usSubs.delete(k); }
+    for (const [k, sym] of want) if (!usSubs.has(k)) usSubs.set(k, USRT.sub(sym, p => {
+      const o = px[k] || {}, prev = o.prev ?? null;
+      px[k] = { ...o, price: p, chgPct: prev ? (p / prev - 1) * 100 : o.chgPct ?? null, live: 'finnhub' };
+      usPaint();
+    }));
+    // PC 서버가 없으면 전일 종가·첫 가격을 Finnhub REST로 (분당 60회 한도라 천천히)
+    clearTimeout(usSeedT);
+    if (USRT.on() && DS.srv.ok !== true) usSeedT = setTimeout(async () => {
+      for (const [k, sym] of want) {
+        if (!usSubs.has(k) || (px[k] && px[k].prev)) continue;
+        try { const v = await USRT.quote(sym); const o = px[k] || {}; px[k] = { ...o, prev: v.prev, price: o.live ? o.price : v.price, chgPct: v.prev ? ((o.live ? o.price : v.price) / v.prev - 1) * 100 : v.chgPct }; usPaint(); }
+        catch (e) { console.warn('finnhub quote', sym, e.message); if (/한도|키가/.test(e.message)) break; }
+      }
+    }, 300);
   }
   // 바이낸스 현물 · CRYPTO(달러) 줄 가격: 20초마다
   let pollOT = 0;
@@ -4645,6 +4787,7 @@ const UI = (() => {
     CH.load(key, ST.tf);
     renderList(); renderDetail(true);
     $('list').querySelector('.row.cur')?.scrollIntoView({ block: 'nearest' });
+    syncUS();
     if (key.startsWith('YAHOO:') && !px[key]) pollYahoo();
     if (/^(BINANCESPOT|CRYPTO|COINBASE):/.test(key) && !px[key]) pollOther();
   }
@@ -4834,7 +4977,38 @@ const UI = (() => {
     const off = d.querySelector('#srvOff');
     if (off) off.onclick = () => { DS.setLocalEnabled(false); paintSrv(); d.close(); toast('PC 서버 연결을 껐습니다 (코인 모드)'); };
   }
+  function finnhubDialog() {
+    const has = USRT.on(), stName = { off: '꺼짐', idle: '대기 (볼 종목이 없음)', connecting: '연결 중…', on: '실시간 연결됨', error: '오류' }[USRT.status] || USRT.status;
+    const d = openDlg(`<div class="in"><header>미국 주식 실시간 (Finnhub)<button class="ib" data-x>✕</button></header><div class="body">
+      <div>미국 주식 가격을 <b>체결이 날 때마다</b> 받습니다. 지금은 PC 서버(야후)에서 봉 30초·가격 60초마다 받고 있습니다.</div>
+      <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li><a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io 가입</a> (무료, 카드 필요 없음) → 대시보드의 <b>API Key</b>를 복사합니다.</li>
+        <li>아래에 붙여 넣고 「저장 · 확인」을 누릅니다.</li>
+      </ol>
+      <label>API 키<input id="fhKey" autocomplete="off" spellcheck="false" placeholder="예: ctxxxxxxxxxxxxxxxx" value="${esc(has ? '••••••••••••' : '')}"></label>
+      <div class="dim" style="font-size:11.5px;line-height:1.6">· 키는 <b>이 브라우저에만</b> 저장됩니다 (백업 파일·홈페이지 저장소에 안 들어감). 휴대폰은 따로 넣어야 합니다.<br>
+        · 무료 키: 동시 50종목 · 분당 60회 · <b>개인 용도</b>. 화면을 다른 사람에게 서비스하려면 유료 계약이 필요합니다.<br>
+        · PC 서버가 켜져 있으면: 차트 봉은 야후, 지금 봉·가격은 Finnhub 체결로 바로 움직입니다.<br>
+        · PC 서버가 없으면 (휴대폰 등): 관심목록 가격만 실시간이고, 차트는 지금처럼 바이낸스 주식 선물로 열립니다.</div>
+      <div id="fhRes" class="dim">지금 상태: ${esc(stName)}${USRT.err ? ' · ' + esc(USRT.err) : ''}${USRT.count ? ` · ${USRT.count}종목 구독` : ''}</div></div>
+      <footer>${has ? '<button class="btn left" id="fhOff">키 지우기</button>' : ''}<button class="btn" data-x>닫기</button><button class="btn primary" id="fhSave">저장 · 확인</button></footer></div>`);
+    const inp = d.querySelector('#fhKey'), res = d.querySelector('#fhRes');
+    inp.onfocus = () => { if (/^•+$/.test(inp.value)) inp.value = ''; };
+    d.querySelector('#fhSave').onclick = async () => {
+      const v = inp.value.trim();
+      if (!v || /^•+$/.test(v)) { res.textContent = '키를 붙여 넣으세요.'; return; }
+      if (!/^[A-Za-z0-9_-]{8,64}$/.test(v)) { res.innerHTML = '<span class="neg">키 모양이 아닙니다.</span> 대시보드의 API Key를 그대로 복사하세요.'; return; }
+      res.textContent = '확인 중… (최대 10초)';
+      const t = await USRT.test(v);
+      if (/^✗/.test(t.rest || '') || /^✗/.test(t.ws || '')) { res.innerHTML = `<span class="neg">저장하지 않았습니다.</span> 현재가: ${esc(t.rest)} · 실시간: ${esc(t.ws || '-')}`; return; }
+      USRT.setToken(v); syncUS(); if (ST.key && USRT.symOf(ST.key)) CH.load(ST.key, ST.tf); renderList();
+      d.close(); toast(`Finnhub 연결됨 · ${t.rest} · ${t.ws}`, 5000);
+    };
+    const off = d.querySelector('#fhOff');
+    if (off) off.onclick = () => { USRT.setToken(''); syncUS(); if (ST.key && USRT.symOf(ST.key)) CH.load(ST.key, ST.tf); renderList(); d.close(); toast('Finnhub 키를 지웠습니다'); };
+  }
   let oldWarned = false;
+  { let shown = ''; USRT.onStatus(st => { if (st === 'error' && USRT.err && USRT.err !== shown) { shown = USRT.err; toast('Finnhub: ' + USRT.err + ' (⋯ → 미국 주식 실시간)', 6000); } }); }
   async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast('PC 프로그램이 옛 버전입니다 → 새 「나만의차트-PC프로그램」의 설치하기.bat을 한 번 실행하세요 (미국 주식 시세가 하루 늦게 보일 수 있음)', 12000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
   function applyTheme() {
     if (ST.theme === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', ST.theme);
@@ -5282,6 +5456,7 @@ const UI = (() => {
       ['백업 저장 (관심목록·지표·그림)', exportBackup],
       ['백업 불러오기', importBackup],
       '-',
+      [`미국 주식 실시간 (Finnhub)${USRT.on() ? ' · ' + ({ on: '연결됨', connecting: '연결 중', error: '오류', idle: '대기' }[USRT.status] || '') : ''}`, finnhubDialog],
       DS.HOSTED ? ['PC 서버 연결 (주식·선물)', serverDialog]
         : ['PC 서버 다시 확인', async () => { await DS.ping(); paintSrv(); toast(DS.srv.ok ? 'PC 서버 연결됨' : 'PC 서버가 꺼져 있습니다'); }],
       ['단축키 보기', () => openDlg(`<div class="in"><header>단축키<button class="ib" data-x>✕</button></header><div class="body"><dl style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0">
