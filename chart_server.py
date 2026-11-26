@@ -32,12 +32,14 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from us_universe import UNI
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 log = logging.getLogger("mychart")
 
 SYM_RE = re.compile(r"^[A-Za-z0-9.\-=^_&]{1,24}$")
 DAY_MS = 86_400_000
-SERVER_VERSION = "2026-11-24b"  # 마지막 거래일 보정
+SERVER_VERSION = "2026-11-25a"  # 미국 전 종목 목록(한글명·섹터·ETF·테마), 시세에 날짜
 
 # tf: (야후 interval, 전체 기간, 최근 기간, 합치기(kind, n))
 TF = {
@@ -298,7 +300,7 @@ def quotes(symbols):
             if not c:
                 continue
             prev = c[-2] if len(c) > 1 else None
-            out[s] = {"price": c[-1], "prev": prev, "chgPct": (c[-1] / prev - 1) * 100 if prev else None}
+            out[s] = {"price": c[-1], "prev": prev, "chgPct": (c[-1] / prev - 1) * 100 if prev else None, "day": rows[-1][1]}
         return out
     return cache.get(("q", tuple(symbols)), 45, load)
 
@@ -361,6 +363,31 @@ def trend(symbols):
                 out[s] = st
         return out
     return cache.get(("t", tuple(symbols)), 900, load)
+
+
+# ---------------- 미국 분류(섹터·ETF·테마)별 후보 ----------------
+def us_group(gid, size):
+    """분류 안 종목을 최근 거래대금 순으로 size개 (야후 5일 일봉으로 계산, 10분 저장)"""
+    size = max(10, min(300, size))
+
+    def load():
+        name, syms = UNI.group_syms(gid)
+        names = UNI.names()
+        out = []
+        for i in range(0, len(syms), 200):
+            part = syms[i:i + 200]
+            df = download(part, "5d")
+            for s in part:
+                f = frame_for(df, s)
+                rows = df_rows(f, True) if f is not None else []
+                if not rows:
+                    continue
+                last, prev = rows[-1], (rows[-2] if len(rows) > 1 else None)
+                out.append({"symbol": s, "name": names.get(s) or s, "price": last[5], "chgPct": (last[5] / prev[5] - 1) * 100 if prev else None,
+                            "volume": last[6], "turnover": last[5] * last[6], "mcap": None, "currency": "USD", "exchange": None})
+        out.sort(key=lambda r: r["turnover"] or 0, reverse=True)
+        return {"name": name, "total": len(syms), "rows": out[:size]}
+    return cache.get(("ug", gid, size), 600, load)
 
 
 # ---------------- 스크리너 ----------------
@@ -577,6 +604,10 @@ class Handler(BaseHTTPRequestHandler):
                                              num(arg("minCap")) or 0))
             if p == "/api/yf/trending":
                 return self.send(200, trending(arg("region", "US")))
+            if p == "/api/us/universe":
+                return self.send(200, UNI.payload())
+            if p == "/api/us/group":
+                return self.send(200, us_group(arg("id"), int(arg("size", "100"))))
             if p == "/api/cg/markets":
                 return self.send(200, cg_markets(max(1, min(4, int(arg("page", "1"))))))
             if p == "/api/cg/trending":
@@ -605,6 +636,7 @@ def selftest():
         ("미국 트렌딩", lambda: ", ".join(trending("US")["symbols"][:6])),
         ("추세 지표", lambda: json.dumps({k: round(v["steady"], 1) for k, v in trend(["AAPL", "MSFT", "NVDA"]).items()})),
         ("코인게코 시총", lambda: f"{len(cg_markets(1))}개 첫 {cg_markets(1)[0]['symbol']}"),
+        ("미국 전 종목 목록", lambda: (UNI.build(), (lambda p: f"{len(p['rows'])}개 · 한글명 {sum(1 for r in p['rows'] if r[1])}개")(UNI.payload()))[1]),
     ]
     ok = 0
     for name, fn in tests:
@@ -624,6 +656,8 @@ def main(argv=None):
     ap.add_argument("--selftest", action="store_true", help="야후·코인게코 데이터 받아오기 점검")
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--log", help="출력을 이 파일에 기록 (창 없이 실행할 때)")
+    ap.add_argument("--sec-email", help="SEC(섹터 분류) 요청에 넣을 연락 이메일 (SEC 권장)")
+    ap.add_argument("--no-us-universe", action="store_true", help="미국 전 종목 목록(한글명·섹터) 만들지 않기")
     o = ap.parse_args(argv)
     # 창 없이(pythonw) 실행하면 출력 통로가 없어 요청 기록에서 멈출 수 있음 → 파일로
     if o.log or sys.stdout is None or sys.stderr is None:
@@ -636,6 +670,8 @@ def main(argv=None):
         f = open(path, "a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stderr = f
     logging.basicConfig(level=logging.DEBUG if o.verbose else logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if o.sec_email:
+        os.environ["MYCHART_SEC_EMAIL"] = o.sec_email
     if o.selftest:
         sys.exit(0 if selftest() else 1)
     try:
@@ -649,6 +685,8 @@ def main(argv=None):
         return
     url = f"http://localhost:{o.port}/"
     print(f"나만의 차트: {url}  (끄려면 Ctrl+C)")
+    if not o.no_us_universe:
+        UNI.start()   # 미국 전 종목·한글명·섹터 (백그라운드, 하루 1회)
     if not o.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

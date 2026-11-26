@@ -7,7 +7,8 @@
 - **미국 주식 실시간 (선택)**: ⋯ → 「미국 주식 실시간 (Finnhub)」에 내 무료 키를 넣으면 체결이 날 때마다 관심목록 가격과 지금 봉이 바로 움직입니다. 자세한 내용은 `docs/US_STOCK_REALTIME.md`
 - **종목 아이콘**: 관심목록·검색·심볼 버튼 (로고가 없으면 글자)
 - **스캐너**: 로그 피보 레벨 × 장기 이평 × NWE × TD × WaveTrend 겹침
-- **종목 찾기**: 시가총액, 거래대금, 거래량 급증, 꾸준한 상승, 인기·트렌딩, 상승률
+- **종목 찾기**: 시가총액, 거래대금, 거래량 급증, 꾸준한 상승, 인기·트렌딩, 상승률. 미국 주식은 테마·섹터·ETF 분류로도 (PC 서버)
+- **미국 전 종목 한글 검색**: PC 서버가 미국 상장 종목 전체(한글명·ETF·섹터)를 받아 두어 "엔비디아", "슈왑 배당"처럼 찾기
 
 ## 쓰는 법
 
@@ -23,6 +24,7 @@
 - Bitstamp·Bybit 공개 API: 달러 장기 시세(2011년~)와 4시간봉 이상 OI 과거(2020년~). 키 없이 브라우저에서 직접 요청합니다.
 - 「TV 원본」 탭: 트레이딩뷰 무료 Advanced Chart 위젯을 그대로 띄웁니다.
 - 야후 파이낸스(yfinance): 내 PC 서버가 받아 옵니다. 개인 용도로만 쓰세요.
+- 미국 종목 목록: 나스닥 심볼 디렉토리(종목·ETF 여부), 한국투자증권 해외종목 마스터 공개 파일(한글명), 미 증권거래위원회 SEC EDGAR(업종코드 → 섹터). PC 서버가 하루 1번 받아 `data/` 폴더에 저장합니다.
 - 코인게코 무료 API: 크립토 시가총액·트렌딩 (Data provided by [CoinGecko](https://www.coingecko.com/)).
 - 종목 아이콘: 크립토는 CoinCap 아이콘·cryptocurrency-icons(CC0), 주식은 Financial Modeling Prep 로고 주소를 브라우저가 직접 불러옵니다. 로고 상표권은 각 회사에 있습니다.
 - 차트 엔진: [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts) (Apache-2.0).

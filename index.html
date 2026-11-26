@@ -639,6 +639,7 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
       <div class="panel">
         <fieldset>
           <label>시장<select id="dMarket"><option value="crypto">크립토</option><option value="us">미국 주식</option><option value="kr">한국 주식</option></select></label>
+          <label id="dGroupL" hidden>미국 분류<select id="dGroup"><option value="">전체 (야후 스크리너)</option></select></label>
           <label>찾는 기준
             <select id="dMode">
               <option value="mcap">시가총액 큰 순</option>
@@ -2077,6 +2078,39 @@ const DS = (() => {
       return j.quotes.map(x => { const key = 'YAHOO:' + x.symbol; if (x.name) names[key] = names[key] || x.name; return { key, id: x.symbol, name: x.name, exch: x.exchange, type: x.type }; });
     } catch { return []; }
   }
+  // 미국 전 종목 (PC 서버 /api/us/universe): 한글명 · 거래소 · 종류 · 섹터·ETF·테마 분류
+  const us = { rows: [], by: new Map(), groups: null, v: null, loading: null };
+  function loadUS(force) {
+    if (!srv.ok) return Promise.resolve(us);
+    if (us.loading && !force) return us.loading;
+    us.loading = api('/api/us/universe').then(j => {
+      if (j.v !== us.v) {
+        us.v = j.v; us.rows = j.rows || []; us.groups = j.groups; us.by = new Map(us.rows.map(r => [r[0], r]));
+        for (const r of us.rows) { const k = 'YAHOO:' + r[0]; if (r[1] && !names[k]) names[k] = r[1]; }
+      }
+      us.sic = j.sic; us.building = j.building;
+      // 섹터 분류가 아직 모이는 중이면 잠시 뒤 다시
+      if ((j.sic && j.sic.running) || j.building || !us.rows.length) setTimeout(() => { us.loading = null; loadUS(); }, 60000);
+      return us;
+    }).catch(e => { us.loading = null; console.warn('us universe', e.message); return us; });
+    return us.loading;
+  }
+  const US_TYPE = { etf: 'ETF', wrt: '워런트', unit: '유닛', rt: '권리', pfd: '우선주·채권' };
+  function usSearch(s, limit = 10) {
+    if (!us.rows.length || !s) return [];
+    const up = s.toUpperCase(), hits = [];
+    for (const r of us.rows) {
+      const sym = r[0];
+      let sc = sym === up ? 0 : sym.startsWith(up) ? 1 : (r[1] && r[1].replace(/\s/g, '').toUpperCase().includes(up)) ? 2 : (up.length >= 3 && r[2].toUpperCase().includes(up)) ? 3 : -1;
+      if (sc < 0) continue;
+      if (r[4] !== 'cs' && r[4] !== 'etf') sc += 3;
+      hits.push([sc, sym.length, r]);
+      if (hits.length > 400) break;
+    }
+    return hits.sort((a, b) => a[0] - b[0] || a[1] - b[1]).slice(0, limit)
+      .map(([, , r]) => ({ key: 'YAHOO:' + r[0], id: r[0], name: r[1] ? `${r[1]} · ${r[2]}` : r[2], exch: `${r[3]}${US_TYPE[r[4]] ? ' · ' + US_TYPE[r[4]] : ''}` }));
+  }
+
   let cbSet = null;   // 코인베이스 달러 종목 (부팅 때 받음)
   function loadCoinbase() { return LONG.cbProducts().then(m => { cbSet = m; DS.cbTick = m; return m; }); }
   function localSearch(q, limit = 30) {
@@ -2098,6 +2132,7 @@ const DS = (() => {
     for (const [code, n] of Object.entries(KR_NAMES)) if (n.toUpperCase().includes(s) || code.startsWith(s)) out.push({ key: null, id: code, name: n, exch: '한국', kr: code });
     for (const [a, y] of Object.entries(ALIAS)) if (a.startsWith(s) || ko.includes(a)) if (!out.some(o => o.key === 'YAHOO:' + y)) out.push({ key: 'YAHOO:' + y, id: a, name: IDX_NAME[y] || FUT[(y.match(/^(.*)=F$/) || [])[1]] || y, exch: '지수·선물' });
     for (const v of ko) { const k = resolveSync(v); if (k && !out.some(o => o.key === k)) out.push({ key: k, id: v, name: nameOf(k) || v, exch: sourceLabel(k) }); }
+    for (const x of usSearch(q.trim().replace(/\s+/g, ''))) if (!out.some(o => o.key === x.key)) out.push(x);   // 미국 전 종목 (한글명)
     return out.slice(0, limit);
   }
 
@@ -2302,7 +2337,7 @@ const DS = (() => {
   function reconnect() { for (const f of wakeSubs) try { f(); } catch {} }
   return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
     resolveSync, resolve, search, localSearch, klines, cachedKlines, recent, streamKline, streamTickers, binanceTickers, yahooQuotes,
-    cgMarkets, cgTrending, KR_NAMES };
+    cgMarkets, cgTrending, KR_NAMES, us, loadUS, usSearch };
 })();
 
 // ============================================================
@@ -4667,7 +4702,18 @@ const UI = (() => {
     clearTimeout(pollT);
     const keys = [...new Set([...sideItems(), ST.key].filter(k => k && k.startsWith('YAHOO:')))].slice(0, 200);
     if (keys.length && DS.srv.ok) {
-      try { Object.assign(px, await DS.yahooQuotes(keys)); paintPrices(); renderDetail(); } catch (e) { console.warn('quotes', e.message); }
+      try {
+        const fresh = await DS.yahooQuotes(keys), today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        for (const [k, q] of Object.entries(fresh)) {
+          // 실시간 체결의 등락 기준가: 야후 마지막 일봉이 오늘 전이면(프리마켓) 그 종가, 오늘이면 전날 종가
+          // (주말·휴장엔 체결이 없어 야후의 지난 거래일 등락이 그대로 보임 · 옛 서버는 day가 없어 전날 종가)
+          q.ref = q.day && q.day < today && q.price ? q.price : q.prev;
+          const o = px[k];
+          if (o && o.live && o.liveT && Date.now() - o.liveT < 120000) { q.price = o.price; q.live = o.live; q.liveT = o.liveT; if (q.ref) q.chgPct = (q.price / q.ref - 1) * 100; }
+          px[k] = q;
+        }
+        paintPrices(); renderDetail();
+      } catch (e) { console.warn('quotes', e.message); }
     }
     pollT = setTimeout(pollYahoo, 60000);
     syncUS();
@@ -4680,8 +4726,8 @@ const UI = (() => {
     if (USRT.on()) for (const k of [ST.key, ...sideItems()]) { const s = USRT.symOf(k); if (s && !want.has(k) && want.size < USRT.MAX) want.set(k, s); }
     for (const [k, off] of usSubs) if (!want.has(k)) { off(); usSubs.delete(k); }
     for (const [k, sym] of want) if (!usSubs.has(k)) usSubs.set(k, USRT.sub(sym, p => {
-      const o = px[k] || {}, prev = o.prev ?? null;
-      px[k] = { ...o, price: p, chgPct: prev ? (p / prev - 1) * 100 : o.chgPct ?? null, live: 'finnhub' };
+      const o = px[k] || {}, prev = o.ref ?? o.prev ?? null;
+      px[k] = { ...o, price: p, chgPct: prev ? (p / prev - 1) * 100 : o.chgPct ?? null, live: 'finnhub', liveT: Date.now() };
       usPaint();
     }));
     // PC 서버가 없으면 전일 종가·첫 가격을 Finnhub REST로 (분당 60회 한도라 천천히)
@@ -5009,7 +5055,7 @@ const UI = (() => {
   }
   let oldWarned = false;
   { let shown = ''; USRT.onStatus(st => { if (st === 'error' && USRT.err && USRT.err !== shown) { shown = USRT.err; toast('Finnhub: ' + USRT.err + ' (⋯ → 미국 주식 실시간)', 6000); } }); }
-  async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast('PC 프로그램이 옛 버전입니다 → 새 「나만의차트-PC프로그램」의 설치하기.bat을 한 번 실행하세요 (미국 주식 시세가 하루 늦게 보일 수 있음)', 12000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
+  async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && !DS.us.rows.length) DS.loadUS(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast('PC 프로그램이 옛 버전입니다 → 새 「나만의차트-PC프로그램」의 설치하기.bat을 한 번 실행하세요 (미국 주식 시세가 하루 늦게 보일 수 있음)', 12000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
   function applyTheme() {
     if (ST.theme === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', ST.theme);
   }
@@ -5902,7 +5948,11 @@ const DISC = (() => {
     if (!DS.srv.ok) { await DS.ping(); if (!DS.srv.ok) throw new Error(DS.HOSTED ? '주식 찾기는 PC 서버가 필요합니다. PC에서 start_chart.bat을 켜고 상단 ⋯ → 「PC 서버 연결」을 누르세요. 크립토는 바로 됩니다.' : '주식 찾기는 PC 서버가 필요합니다. start_chart.bat을 실행한 뒤 다시 누르세요.'); }
     const market = o.market, cur = market === 'kr' ? 'KRW' : 'USD';
     let base, note = '';
-    if (o.mode === 'trending') {
+    if (market === 'us' && o.group) {
+      status('분류 안 종목 거래대금 계산 중… (처음엔 10~30초)');
+      const r = await DS.api('/api/us/group', { id: o.group, size: o.size });
+      base = r.rows; note = `${r.name} ${r.total}종목 중 최근 거래대금 상위 ${r.rows.length}`;
+    } else if (o.mode === 'trending') {
       status('야후 트렌딩…');
       try {
         const t = await DS.api('/api/yf/trending', { region: market.toUpperCase() });
@@ -5941,7 +5991,7 @@ const DISC = (() => {
   }
   async function run() {
     if (running) return; running = true;
-    const o = { market: $('dMarket').value, mode: $('dMode').value, size: +$('dSize').value, minCap: parseCap($('dMinCap').value),
+    const o = { market: $('dMarket').value, group: $('dMarket').value === 'us' ? $('dGroup').value : '', mode: $('dMode').value, size: +$('dSize').value, minCap: parseCap($('dMinCap').value),
       minR2: $('dMinR2').value === '' ? null : +$('dMinR2').value, minRet: $('dMinRet').value === '' ? null : +$('dMinRet').value, above200: $('dAbove200').checked };
     $('dRun').disabled = true; prog(0, 1); const t0 = performance.now();
     try {
@@ -5956,7 +6006,7 @@ const DISC = (() => {
       list = finalSort(list, o.mode);
       list.forEach((r, i) => r.rank = i + 1);
       rows = list; sortKey = 'rank'; sortAsc = true; render();
-      const desc = `${$('dMarket').selectedOptions[0].textContent} · ${$('dMode').selectedOptions[0].textContent}`;
+      const desc = `${$('dMarket').selectedOptions[0].textContent}${o.group ? ' · ' + $('dGroup').selectedOptions[0].textContent.replace(/\s*\(\d[\d,]*\)$/, '') : ''} · ${$('dMode').selectedOptions[0].textContent}`;
       $('dSummary').innerHTML = [`${desc}`, `${rows.length}개`, res.note, rows.filter(r => r.err).length ? `일부 실패 ${rows.filter(r => r.err).length}` : null]
         .filter(Boolean).map(t => `<span>${esc(t)}</span>`).join('');
       status(`완료 ${new Date().toLocaleTimeString('ko-KR')} · ${((performance.now() - t0) / 1000).toFixed(1)}초 · 행을 누르면 차트`);
@@ -5998,8 +6048,25 @@ const DISC = (() => {
       : [...rows].sort((a, b) => { const x = val(a, sortKey), y = val(b, sortKey); return (x > y ? 1 : x < y ? -1 : 0) * (sortAsc ? 1 : -1); });
     $('dBody').innerHTML = s.map(r => `<tr data-key="${esc(r.key)}">${COLS.map(([k]) => `<td class="${['sym', 'name', 'spark'].includes(k) ? 'l' : ''}">${cell(r, k)}</td>`).join('')}</tr>`).join('');
   }
+  // 미국 분류 고르기 (PC 서버의 미국 전 종목 목록에서)
+  async function fillGroups() {
+    const on = $('dMarket').value === 'us'; $('dGroupL').hidden = !on; if (!on) return;
+    if (!DS.us.groups) { if (!DS.srv.ok) await DS.ping(); await DS.loadUS(); }
+    const g = DS.us.groups, sel = $('dGroup'), cur = sel.value;
+    if (!g) { sel.innerHTML = '<option value="">전체 (야후 스크리너)</option>'; sel.title = 'PC 서버를 새 버전으로 켜면 섹터·ETF·테마 분류를 고를 수 있습니다'; return; }
+    const opt = x => `<option value="${x.id}">${esc(x.name)} (${x.syms.length.toLocaleString()})</option>`;
+    sel.innerHTML = '<option value="">전체 (야후 스크리너)</option>'
+      + `<optgroup label="테마">${g.theme.filter(x => x.syms.length).map(opt).join('')}</optgroup>`
+      + `<optgroup label="섹터${DS.us.sic && DS.us.sic.running ? ` (분류 중 ${DS.us.sic.done}/${DS.us.sic.total})` : ''}">${g.sector.filter(x => x.syms.length).map(opt).join('')}</optgroup>`
+      + `<optgroup label="ETF">${g.etf.map(opt).join('')}</optgroup>`;
+    sel.value = [...sel.options].some(x => x.value === cur) ? cur : '';
+    sel.title = '섹터는 미 증권거래위원회(SEC) 업종코드 기준이라 트레이딩뷰 분류와 다를 수 있습니다';
+  }
   function init() {
     $('dRun').onclick = run;
+    $('dMarket').addEventListener('change', fillGroups);
+    $('dGroup').addEventListener('focus', () => { if (!DS.us.groups) fillGroups(); });
+    fillGroups();
     $('dHead').onclick = e => { const k = e.target.closest('th')?.dataset.k; if (!k || k === 'spark') return; if (k === sortKey) sortAsc = !sortAsc; else { sortKey = k; sortAsc = ['rank', 'sym', 'name', 'maxDD'].includes(k); } render(); };
     $('dBody').onclick = e => {
       const st = e.target.closest('[data-star]'); if (st) { e.stopPropagation(); const L = UI.curList(), k = st.dataset.star; L.items.includes(k) ? L.items.splice(L.items.indexOf(k), 1) : L.items.push(k); UI.save(); render(); return; }
