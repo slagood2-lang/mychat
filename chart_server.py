@@ -40,7 +40,7 @@ log = logging.getLogger("mychart")
 
 SYM_RE = re.compile(r"^[A-Za-z0-9.\-=^_&]{1,24}$")
 DAY_MS = 86_400_000
-SERVER_VERSION = "2026-11-26a"  # 미국 시세판(전 종목 가격·거래대금, Alpaca 실시간 선택), 미니 차트
+SERVER_VERSION = "2026-11-26b"  # 브라우저 맞춤(관심목록·도구 설정·그림을 이 PC의 브라우저끼리 같게) · 이전: 미국 시세판, 미니 차트
 
 # tf: (야후 interval, 전체 기간, 최근 기간, 합치기(kind, n))
 TF = {
@@ -532,6 +532,93 @@ def origin_ok(origin):
     return h in OWN_HOSTS
 
 
+# ---------------- 브라우저 맞춤 (관심목록 · 도구 설정 · 그림) ----------------
+# 크롬 · Claude 앱 안 브라우저 · 엣지처럼 이 PC의 여러 브라우저가 같은 관심목록·설정·그림을 쓰도록 PC 서버에 한 벌 보관.
+# 칸(관심목록, 차트 설정, 종목별 그림 …) 단위로 마지막에 바꾼 쪽이 이김. 내 PC 안에만 있고 홈페이지(인터넷)에는 안 올라감.
+# 바뀔 때마다 하루 한 개씩 data/sync_backup/ 에 이전 것을 남김 (30일) → 실수로 덮어써도 되돌릴 수 있음.
+SYNC_ID_RE = re.compile(r"^(st\.[A-Za-z0-9_]{1,40}|tfs|d\.[^\s]{1,120})$")
+SYNC_MAX = 30 * 1024 * 1024   # 한 번에 받는 크기 (붙여 넣은 그림 포함)
+
+
+class SyncStore:
+    def __init__(self, folder):
+        self.path = os.path.join(folder, "sync_state.json")
+        self.bak = os.path.join(folder, "sync_backup")
+        self.lock = threading.Lock()
+        self.st = None
+
+    def _load(self):
+        if self.st is None:
+            try:
+                with open(self.path, encoding="utf-8") as f:
+                    st = json.load(f)
+                if not isinstance(st, dict) or not isinstance(st.get("sec"), dict):
+                    raise ValueError("형식이 다름")
+                self.st = {"rev": int(st.get("rev") or 0), "sec": st["sec"]}
+            except FileNotFoundError:
+                self.st = {"rev": 0, "sec": {}}
+            except Exception as e:
+                log.warning("맞춤 파일을 읽지 못해 옆에 남기고 새로 시작: %s", e)
+                try:
+                    os.replace(self.path, self.path + ".broken")
+                except OSError:
+                    pass
+                self.st = {"rev": 0, "sec": {}}
+        return self.st
+
+    def get(self, since=0):
+        with self.lock:
+            st = self._load()
+            if since > st["rev"]:
+                since = 0   # 서버 쪽이 새로 시작됨 → 전부
+            sec = {k: v for k, v in st["sec"].items() if int(v.get("r", 0)) > since}
+            return {"rev": st["rev"], "since": since, "sec": sec}
+
+    def put(self, changes, by=""):
+        if not isinstance(changes, dict) or not changes:
+            raise ValueError("바꿀 것이 없습니다")
+        for k, v in changes.items():
+            if not isinstance(k, str) or not SYNC_ID_RE.match(k) or not (v is None or isinstance(v, str)):
+                raise ValueError("잘못된 항목: " + str(k)[:40])
+        with self.lock:
+            st = self._load()
+            self._backup()
+            rev, now = st["rev"] + 1, int(time.time() * 1000)
+            for k, v in changes.items():
+                st["sec"][k] = {"v": v, "at": now, "by": str(by)[:40], "r": rev}
+            st["rev"] = rev
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(st, f, ensure_ascii=False, separators=(",", ":"))
+            os.replace(tmp, self.path)
+            return {"rev": rev, "at": now}
+
+    def _backup(self):
+        # 오늘 처음 바뀌기 직전의 파일을 백업 (하루 1개, 30개까지)
+        try:
+            if not os.path.exists(self.path):
+                return
+            os.makedirs(self.bak, exist_ok=True)
+            dst = os.path.join(self.bak, "sync_" + time.strftime("%Y%m%d") + ".json")
+            if not os.path.exists(dst):
+                with open(self.path, "rb") as a, open(dst, "wb") as b:
+                    b.write(a.read())
+                old = sorted(n for n in os.listdir(self.bak) if n.startswith("sync_") and n.endswith(".json"))
+                for n in old[:-30]:
+                    os.remove(os.path.join(self.bak, n))
+        except OSError as e:
+            log.warning("맞춤 백업 실패: %s", e)
+
+
+SYNC = SyncStore(os.path.join(HERE, "data"))
+
+
+def sync_allowed(headers):
+    # 내 홈페이지·이 PC 화면에서, 맞춤 표시 머리글(X-MC-Sync)을 붙인 요청만 (다른 사이트가 내 관심목록을 읽지 못하게)
+    return headers.get("X-MC-Sync") == "1" and origin_ok(headers.get("Origin"))
+
+
 # ---------------- HTTP ----------------
 def symbols_param(qs, key="symbols", limit=250):
     raw = (qs.get(key) or [""])[0]
@@ -564,7 +651,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-MC-Sync")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
 
@@ -574,10 +661,19 @@ class Handler(BaseHTTPRequestHandler):
             if not origin_ok(self.headers.get("Origin")):
                 return self.send(403, {"error": "이 사이트에서는 바꿀 수 없습니다"})
             n = int(self.headers.get("Content-Length") or 0)
+            if p == "/api/sync":
+                if not sync_allowed(self.headers):
+                    return self.send(403, {"error": "이 사이트에서는 바꿀 수 없습니다"})
+                if n > SYNC_MAX:
+                    return self.send(413, {"error": "너무 큽니다"})
+                body = json.loads(self.rfile.read(n) or b"{}")
+                return self.send(200, SYNC.put(body.get("changes"), body.get("by", "")))
             body = json.loads(self.rfile.read(min(n, 10000)) or b"{}")
             if p == "/api/us/keys":
                 return self.send(200, BOARD.set_keys(body.get("key", ""), body.get("secret", "")))
             return self.send(404, {"error": "unknown api"})
+        except ValueError as e:
+            return self.send(400, {"error": str(e)[:200]})
         except Exception as e:
             log.warning("POST %s: %s", p, e)
             return self.send(500, {"error": str(e)})
@@ -609,8 +705,16 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     ver = yf().__version__
                 except Exception as e:
-                    return self.send(200, {"ok": True, "yfinance": None, "warn": str(e), "version": SERVER_VERSION})
-                return self.send(200, {"ok": True, "yfinance": ver, "version": SERVER_VERSION})
+                    return self.send(200, {"ok": True, "yfinance": None, "warn": str(e), "version": SERVER_VERSION, "sync": True})
+                return self.send(200, {"ok": True, "yfinance": ver, "version": SERVER_VERSION, "sync": True})
+            if p == "/api/sync":
+                if not sync_allowed(self.headers):
+                    return self.send(403, {"error": "이 사이트에서는 읽을 수 없습니다"})
+                try:
+                    since = max(0, int(arg("since", "0")))
+                except ValueError:
+                    since = 0
+                return self.send(200, SYNC.get(since))
             if p == "/api/open-tv":
                 # 트레이딩뷰 링크를 운영체제로 열기 → 윈도우에서 트레이딩뷰 데스크톱 앱이 tradingview.com 링크를 맡고 있으면 앱으로 열림
                 url = arg("url")

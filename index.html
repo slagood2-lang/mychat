@@ -59,6 +59,8 @@ button{cursor:pointer}
 .srv{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);padding:5px 8px;white-space:nowrap;cursor:pointer;border:0;background:transparent;border-radius:5px}
 .srv:hover{background:var(--chip)}
 .srv i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.sync-b{color:#f0b429}
+.sync-t{border-collapse:collapse;width:100%;font-size:12.5px}.sync-t th,.sync-t td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}.sync-t th{color:var(--muted);font-weight:600}
 .srv.ok i{background:var(--up)} .srv.off i{background:var(--down)}
 
 /* ---------- 차트 화면 ---------- */
@@ -480,7 +482,7 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
     <span class="grow"></span>
     <nav class="views" id="views"><button data-view="chart">차트</button><button data-view="scan">스캐너</button><button data-view="disc">종목 찾기</button><button data-view="tv" title="트레이딩뷰 무료 위젯으로 같은 종목 보기">TV 원본</button></nav>
     <button class="mkt" id="mkt" type="button" title="미국 주식 장 상태 (뉴욕 시간 · 휴장일·조기폐장 반영) · 누르면 미국 주식 탐색"><i></i><span></span></button>
-    <button class="srv" id="srv" type="button"><i></i><span>서버 확인 중</span></button>
+    <button class="srv" id="srv" type="button"><i></i><span>서버 확인 중</span></button><button class="srv sync-b" id="syncBadge" type="button" hidden>⟳ 맞춤</button>
     <button class="tb" id="menuBtn" title="설정·백업">⋯</button>
   </header>
 
@@ -3331,6 +3333,8 @@ const CH = (() => {
     try { draw.list = JSON.parse(localStorage.getItem(drawKey()) || '[]'); } catch {}
     hist.undo = []; hist.redo = []; hist.last = snap();
   }
+  let toolStyle = {};
+  function setToolStyles(o) { toolStyle = o && typeof o === 'object' ? o : {}; }
   function setTool(t) {
     S.tool = t; draw.creating = null; draw.sel = null; drawPrim.update();
     box && (box.style.cursor = t === 'cursor' ? '' : 'crosshair');
@@ -3353,6 +3357,8 @@ const CH = (() => {
     if (type === 'regression') base.style.dev = 2;
     if (type === 'vwap') base.style.color = '#ff9800';
     if (type === 'path' || type === 'triangle' || POLY[type]) base.style.w = 2;
+    const rs = toolStyle[type];   // 이 도구로 마지막에 쓴 색·두께·점선·글자 크기
+    if (rs) for (const k of ['color', 'w', 'dash', 'size', 'dev']) if (rs[k] != null) base.style[k] = rs[k];
     return base;
   }
   function relXY(e) { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
@@ -3481,7 +3487,11 @@ const CH = (() => {
     box.addEventListener('contextmenu', e => {
       if (!chart) return;
       e.preventDefault(); e.stopPropagation();
-      if (draw.creating) { draw.creating = null; draw.brushing = false; freezeChart(false); drawPrim.update(); return; }
+      // 그리기 도구를 고른 상태(그리는 중·붓·형광펜·지우개 포함)에서 오른쪽 클릭 = 도구 풀기 (Esc와 같음 · 메뉴는 안 띄움)
+      if (draw.creating || S.tool !== 'cursor') {
+        if (draw.creating) { draw.creating = null; draw.brushing = false; freezeChart(false); }
+        setTool('cursor'); return;
+      }
       const [x, y] = relXY(e), pa = paneAt(x, y); if (!pa) return;
       const h = pa.key && !pa.scale ? hit(pa.key, x, pa.y, pa.W, pa.H) : null;
       if (h) { draw.sel = h.d; drawPrim.update(); }
@@ -4371,6 +4381,7 @@ const CH = (() => {
   return { setTopExtra: f => { topExtra = f; }, init, load, render, undo, redo, setLayout, debugOverlay: id => overlay && overlay.layers.get(id), FULL_LAYOUT, DEFAULT_LAYOUT, addDrawing, duplicate, finishCreate, POLY, TOOL_N, toggleIndicator, removeIndicator, autoScale, selectDrawing, FIBEXT_LEVELS, FIBCH_LEVELS, setLog, setScale, setConfig, setRange, setLocked, setHidden, CFG_DEFAULT, get cfg() { return cfg; }, setMagnet, setTool, deleteSelected, clearDrawings, cancelCreate, addIndicator, updateIndicator, resetLayout,
     rethemed, screenshot, redraw, addImage, saveDrawings, saveFibTemplate, goLatest, fit, TYPES, FIB_DEFAULT,
     get state() { return S; }, get layout() { return layout; }, get drawings() { return draw; }, get chart() { return chart; }, get data() { return D; },
+    setToolStyles, reloadDrawings: () => { if (draw.creating || draw.drag) return false; loadDrawings(); drawPrim && drawPrim.update(); onChange('select'); return true; },
     debugDraw: () => draw.list.map(d => ({ id: d.id, type: d.type, pane: d.pane || 'main', P: proj(d, serOf(d.pane || 'main')), L: d.p.map(q => logicalOf(q.t)) })),
     get fibTemplate() { return fibTemplate; }, refreshScanZones() { for (const h of handles) if (h.inst?.type === 'zones' && h.fill) h.fill(); refreshLegend(); } };
 })();
@@ -5400,14 +5411,14 @@ const UI = (() => {
       : pos ? `<div class="grid2">${num('gP0', '진입가', +dw.p[0].p.toPrecision(10))}${num('gP1', '목표가', +dw.p[1].p.toPrecision(10))}${num('gP2', '손절가', +(dw.p[2] ? dw.p[2].p : dw.p[0].p - (dw.p[1].p - dw.p[0].p)).toPrecision(10))}</div>` : '';
     const isTxt = dw.type === 'text' || dw.type === 'callout';
     const LBL = ['trend', 'ray', 'ext', 'arrow', 'hline', 'hray', 'vline', 'channel', 'rect', 'ellipse', 'triangle', 'path', 'fib', 'fibext', 'fibchannel', 'fibtime', 'pitchfork', 'cross'].includes(dw.type);
-    const extra = (LBL && !isTxt ? `<div class="grid2"><label>선에 글자<input id="gLbT" value="${esc(dw.text || '')}" placeholder="예: 지지선"></label><label>글자 크기<input type="number" id="gLbS" min="8" max="200" value="${dw.style.size || 12}"></label></div>` : '')
+    const extra = (LBL && !isTxt ? `<div class="grid2"><label>선에 글자<input id="gLbT" value="${esc(dw.text || '')}" placeholder="예: 지지선"></label><label>글자 크기 (8~300)<input type="number" id="gLbS" min="8" max="300" value="${dw.style.size || 12}"></label></div>` : '')
       + (dw.type === 'trend' ? `<div class="grid2"><label class="chk"><input type="checkbox" id="gExL"${dw.style.extL ? ' checked' : ''}>왼쪽으로 연장</label><label class="chk"><input type="checkbox" id="gExR"${dw.style.extR ? ' checked' : ''}>오른쪽으로 연장</label></div>` : '')
       + (dw.type === 'rect' || dw.type === 'ellipse' ? `<label>채우기 진하기 (%)<input type="number" id="gFill" min="0" max="100" value="${dw.style.fillA ?? 12}"></label>` : '')
       + (dw.type === 'fibtime' ? `<label>간격 수열 (쉼표로)<input id="gSeq" value="${esc((dw.seq || [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]).join(', '))}"></label><label class="chk"><input type="checkbox" id="gSeqL"${dw.style.labels !== false ? ' checked' : ''}>숫자 표시</label>
           <div class="dim" style="font-size:11.5px">두 점 사이 봉 수를 1로 보고, 수열의 각 수만큼 떨어진 곳에 세로선을 긋습니다.</div>` : '')
       + (dw.type === 'brush' || dw.type === 'highlighter' ? `<div class="dim" style="font-size:11.5px">붓은 Esc를 누르거나 커서를 고를 때까지 계속 그려집니다.</div>` : '');
-    const styleRow = isTxt ? `<label>글자<textarea id="gTxt" rows="2">${esc(dw.text || '')}</textarea></label><div class="grid2"><label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label><label>글자 크기 (8~200)<input type="number" id="gSize" min="8" max="200" value="${dw.style.size || 14}"></label></div>`
-      : `<div class="grid2">${pos ? '' : `<label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label>`}<label>두께<input type="number" id="gW" min="1" max="5" value="${dw.style.w}"></label>
+    const styleRow = isTxt ? `<label>글자<textarea id="gTxt" rows="2">${esc(dw.text || '')}</textarea></label><div class="grid2"><label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label><label>글자 크기 (8~300)<input type="number" id="gSize" min="8" max="300" value="${dw.style.size || 14}"></label></div>`
+      : `<div class="grid2">${pos ? '' : `<label>색<input type="color" id="gCol" value="${String(dw.style.color).slice(0, 7)}"></label>`}<label>두께 (1~10)<input type="number" id="gW" min="1" max="10" value="${dw.style.w}"></label>
         <label class="chk"><input type="checkbox" id="gDash"${dw.style.dash ? ' checked' : ''}>점선</label>${dw.type === 'regression' ? `<label>편차 (σ 배수)<input type="number" id="gDev" min="0.5" max="5" step="0.5" value="${dw.style.dev ?? 2}"></label>` : ''}</div>` + extra;
     const fibBox = isFib ? `
         <div class="grid2"><label class="chk"><input type="checkbox" id="gLog"${(F.log ?? true) ? ' checked' : ''}>로그 스케일 기준 ${dw.type === 'fibchannel' ? '(퍼센트 폭)' : '레벨'}</label>${dw.type === 'fib' ? `<label class="chk"><input type="checkbox" id="gRev"${F.reverse ? ' checked' : ''}>반전 (0과 1 바꾸기)</label>` : ''}
@@ -5438,17 +5449,17 @@ const UI = (() => {
       if (d.returnValue !== 'ok') { CH.redraw(); return; } d.returnValue = '';
       if (isFib) dw.fib = collect();
       const tv = id => d.querySelector('#' + id);
-      if (tv('gLbT')) { dw.text = tv('gLbT').value; dw.style = { ...dw.style, size: Math.max(8, Math.min(200, +tv('gLbS').value || 12)) }; }
+      if (tv('gLbT')) { dw.text = tv('gLbT').value; dw.style = { ...dw.style, size: Math.max(8, Math.min(300, +tv('gLbS').value || 12)) }; }
       if (tv('gExL')) dw.style = { ...dw.style, extL: tv('gExL').checked, extR: tv('gExR').checked };
       if (tv('gFill')) dw.style = { ...dw.style, fillA: Math.max(0, Math.min(100, +tv('gFill').value)) };
       if (tv('gSeq')) { const q = tv('gSeq').value.split(/[,\s]+/).map(Number).filter(n => isFinite(n)); if (q.length) dw.seq = q; dw.style = { ...dw.style, labels: tv('gSeqL').checked }; }
-      else if (isTxt) { dw.text = d.querySelector('#gTxt').value; dw.style = { ...dw.style, color: d.querySelector('#gCol').value, size: Math.max(8, Math.min(200, +d.querySelector('#gSize').value || 14)) }; if (!dw.text.trim()) { CH.selectDrawing(dw); CH.deleteSelected(); return; } }
-      else dw.style = { ...dw.style, ...(d.querySelector('#gCol') ? { color: d.querySelector('#gCol').value } : {}), w: +d.querySelector('#gW').value || 1, dash: d.querySelector('#gDash').checked, ...(d.querySelector('#gDev') ? { dev: +d.querySelector('#gDev').value || 2 } : {}) };
+      else if (isTxt) { dw.text = d.querySelector('#gTxt').value; dw.style = { ...dw.style, color: d.querySelector('#gCol').value, size: Math.max(8, Math.min(300, +d.querySelector('#gSize').value || 14)) }; if (!dw.text.trim()) { CH.selectDrawing(dw); CH.deleteSelected(); return; } }
+      else dw.style = { ...dw.style, ...(d.querySelector('#gCol') ? { color: d.querySelector('#gCol').value } : {}), w: Math.max(1, Math.min(10, +d.querySelector('#gW').value || 1)), dash: d.querySelector('#gDash').checked, ...(d.querySelector('#gDev') ? { dev: +d.querySelector('#gDev').value || 2 } : {}) };
       const v = id => { const el = d.querySelector('#' + id); return el && el.value !== '' && isFinite(+el.value) ? +el.value : null; };
       if (v('gP0') != null) dw.p[0].p = v('gP0');
       if (pos && v('gP1') != null) dw.p[1].p = v('gP1');
       if (pos && v('gP2') != null) dw.p[2] = { t: dw.p[1].t, p: v('gP2') };
-      CH.saveDrawings(); CH.redraw();
+      CH.saveDrawings(); CH.redraw(); rememberStyle(dw);
     };
   }
 
@@ -5481,6 +5492,190 @@ const UI = (() => {
     const repo = location.pathname.split('/').filter(Boolean)[0];
     return repo ? `https://github.com/${m[1]}/${repo}/archive/refs/heads/main.zip` : `https://github.com/${m[1]}/${m[1]}.github.io/archive/refs/heads/main.zip`;
   }
+  // ---------------- 브라우저 맞춤 (PC 서버) ----------------
+  // 크롬 · Claude 앱 안 브라우저 · 엣지 … 이 PC의 브라우저끼리 관심목록 · 도구/차트 설정 · 그림을 같게.
+  // 내 PC 서버에 한 벌 보관(인터넷에는 안 올라감) · 칸 단위로 마지막에 바꾼 쪽이 이김 · 지금 보는 종목·화면 배치는 브라우저마다 따로
+  // 이 브라우저 기록: localStorage 'mc.sync' = { rev, base: {칸: 마지막으로 맞춘 값의 해시}, off }
+  const SYNC = (() => {
+    const META = 'mc.sync', NEED = '2026-11-26b', H = { 'X-MC-Sync': '1' };
+    const LOCAL_ONLY = new Set(['key', 'tf', 'view', 'sideTab', 'split', 'detailH', 'favPos']);
+    const who = (() => { const u = navigator.userAgent; return /Claude|Electron/.test(u) ? 'Claude 앱' : /Edg\//.test(u) ? '엣지' : /Whale/.test(u) ? '웨일' : /SamsungBrowser/.test(u) ? '삼성 인터넷' : /Firefox/.test(u) ? '파이어폭스' : /Chrome/.test(u) ? '크롬' : /Safari/.test(u) ? '사파리' : '브라우저'; })();
+    let meta = read(META) || {}; meta.base ||= {};
+    const st = { state: 'idle', at: 0, err: '', busy: false };   // idle · nosrv · old · off · ask · skip · on · err
+    let timer = null, reloads = 0;
+    const hash = v => { if (v == null) return null; let h = 5381; for (let i = 0; i < v.length; i++) h = (h * 33 + v.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + '.' + v.length; };
+    const saveMeta = () => { try { localStorage.setItem(META, JSON.stringify(meta)); } catch {} };
+    const usable = () => !PANE && DS.srv.enabled && DS.srv.ok === true && !meta.off;
+    const localOf = id => id.startsWith('st.') ? (ST[id.slice(3)] === undefined || LOCAL_ONLY.has(id.slice(3)) ? null : JSON.stringify(ST[id.slice(3)]))
+      : id === 'tfs' ? localStorage.getItem('mc.tfs') : id.startsWith('d.') ? localStorage.getItem('mc.d.' + id.slice(2)) : null;
+    function collect() {
+      const o = {};
+      for (const k of Object.keys(ST)) if (!LOCAL_ONLY.has(k) && ST[k] !== undefined) o['st.' + k] = JSON.stringify(ST[k]);
+      const tf = localStorage.getItem('mc.tfs'); if (tf != null) o.tfs = tf;
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('mc.d.')) o['d.' + k.slice(5)] = localStorage.getItem(k); }
+      return o;
+    }
+    async function call(method, body, q = '') {
+      const b = body ? JSON.stringify(body) : undefined;
+      const r = await fetch(DS.SERVER + '/api/sync' + q, { method, cache: 'no-store', headers: b ? { ...H, 'Content-Type': 'application/json' } : H, body: b, keepalive: !!b && b.length < 60000 });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+      return j;
+    }
+    // 서버 값을 이 브라우저에 넣기
+    function apply(sec) {
+      const ch = { st: false, lists: false, tfs: false, cur: false, n: 0 };
+      for (const [id, v] of Object.entries(sec)) {
+        if (id.startsWith('st.')) {
+          const k = id.slice(3); if (LOCAL_ONLY.has(k)) continue;
+          if (v == null) delete ST[k]; else { try { ST[k] = JSON.parse(v); } catch { continue; } }
+          if (k === 'lists' || k === 'active') ch.lists = true; else ch.st = true;
+        } else if (id === 'tfs') { try { v == null ? localStorage.removeItem('mc.tfs') : localStorage.setItem('mc.tfs', v); } catch {} ch.tfs = true; }
+        else if (id.startsWith('d.')) { const k = 'mc.d.' + id.slice(2); try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} if (id.slice(2) === CH.state.key) ch.cur = true; }
+        else continue;
+        meta.base[id] = hash(v); ch.n++;
+      }
+      if (ch.st || ch.lists) { if (!Array.isArray(ST.lists) || !ST.lists.length) ST.lists = [{ name: '내 관심목록', items: [] }]; if (!(ST.active < ST.lists.length)) ST.active = 0; save(); }
+      return ch;
+    }
+    // 화면에 반영: 관심목록·그림은 그 자리에서, 다른 설정은 새로 열기(한 번)
+    function refresh(ch, from) {
+      if (!ch.n) return null;
+      if (ch.st || ch.tfs) {
+        saveMeta();
+        const n = +(sessionStorage.getItem('mc.syncN') || 0); if (n > 3) { st.state = 'err'; st.err = '설정이 계속 바뀌어 새로 열기를 멈췄습니다'; return null; }
+        sessionStorage.setItem('mc.syncN', String(n + 1)); sessionStorage.setItem('mc.syncMsg', from);
+        location.reload(); return 'reload';
+      }
+      if (ch.lists) { renderWlSel(); renderList(); }
+      if (ch.cur) CH.reloadDrawings();
+      toast(`${from}에서 바꾼 ${ch.lists && ch.cur ? '관심목록·그림' : ch.lists ? '관심목록' : '그림'}을 불러왔습니다`, 3500);
+      return 'live';
+    }
+    async function push() {
+      const cur = collect(), changes = {};
+      for (const [id, v] of Object.entries(cur)) if (hash(v) !== (meta.base[id] ?? null)) changes[id] = v;
+      for (const id of Object.keys(meta.base)) if (!(id in cur) && meta.base[id] != null) changes[id] = null;
+      if (!Object.keys(changes).length) return 0;
+      await call('POST', { by: who, changes });
+      for (const [id, v] of Object.entries(changes)) meta.base[id] = hash(v);
+      st.at = Date.now(); saveMeta(); return Object.keys(changes).length;
+    }
+    // 서버에서 바뀐 칸 받기 · live=true면 화면을 새로 열어야 하는 설정은 다음(다시 볼 때)으로 미룸
+    async function pull(live) {
+      const j = await call('GET', null, '?since=' + (meta.rev || 0));
+      if (meta.rev && j.since === 0 && meta.rev > j.rev) { meta = { base: {} }; saveMeta(); return first(j); }   // PC 서버 쪽 기록이 새로 시작됨
+      const take = {}; let from = '', later = false;
+      for (const [id, s] of Object.entries(j.sec)) {
+        const hc = hash(localOf(id)), hs = hash(s.v);
+        if (hc === hs) { meta.base[id] = hs; continue; }
+        if (hc !== (meta.base[id] ?? null)) continue;   // 이 브라우저도 바꿈 → 이 브라우저 것을 올림 (마지막에 바꾼 쪽)
+        if (live && (id === 'tfs' || (id.startsWith('st.') && id !== 'st.lists' && id !== 'st.active'))) { later = true; continue; }
+        take[id] = s.v; from = s.by || from;
+      }
+      if (!later) meta.rev = j.rev;
+      const ch = apply(take); saveMeta();
+      return refresh(ch, from || '다른 브라우저');
+    }
+    const summ = m => {
+      let L = null; try { L = JSON.parse(m['st.lists'] || 'null'); } catch {}
+      const f = Array.isArray(L) && L[0];
+      return { name: f ? f.name : '-', syms: f ? f.items.filter(x => !String(x).startsWith('###')).length : 0, lists: Array.isArray(L) ? L.length : 0,
+        charts: Object.entries(m).filter(([id, v]) => id.startsWith('d.') && v && v !== '[]').length };
+    };
+    // 처음 맞출 때: 서버가 비어 있으면 이 브라우저 것을 올리고, 다르면 어느 쪽을 쓸지 물음
+    async function first(j) {
+      j ||= await call('GET', null, '?since=0');
+      const cur = collect();
+      if (!j.rev) { meta = { base: {} }; await push(); meta.rev = 0; saveMeta(); toast('브라우저 맞춤 켜짐 · 이 브라우저의 관심목록·설정·그림을 PC 서버에 올렸습니다', 5000); return pull(true); }
+      const ids = new Set([...Object.keys(cur), ...Object.keys(j.sec)]), diff = [];
+      for (const id of ids) if (hash(j.sec[id] ? j.sec[id].v : null) !== hash(cur[id] ?? null)) diff.push(id);
+      if (!diff.length) { for (const id of ids) meta.base[id] = hash(cur[id] ?? null); meta.rev = j.rev; saveMeta(); return null; }
+      st.state = 'ask'; paint(); askFirst(j, cur, diff); return 'ask';
+    }
+    function askFirst(j, cur, diff) {
+      const sv = Object.fromEntries(Object.entries(j.sec).map(([id, s]) => [id, s.v])), A = summ(sv), B = summ(cur);
+      const last = Object.values(j.sec).reduce((a, s) => (s.at > a.at ? s : a), { at: 0, by: '' });
+      const when = last.at ? new Date(last.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      const recB = B.syms + B.charts > A.syms + A.charts;
+      const d = openDlg(`<div class="in"><header>브라우저 맞춤 (PC 서버)<button class="ib" data-x>✕</button></header><div class="body">
+        <div>PC 서버에 <b>${esc(last.by || '다른 브라우저')}</b>에서 저장한 관심목록·설정·그림이 있는데 <b>이 브라우저(${esc(who)})</b> 것과 다릅니다. 어느 쪽으로 맞출까요?</div>
+        <table class="sync-t"><tr><th></th><th>PC 서버 (${esc(last.by || '')} ${esc(when)})</th><th>이 브라우저 (${esc(who)})</th></tr>
+          <tr><td>첫 관심목록</td><td>「${esc(A.name)}」 ${A.syms}종목</td><td>「${esc(B.name)}」 ${B.syms}종목</td></tr>
+          <tr><td>관심목록 수</td><td>${A.lists}개</td><td>${B.lists}개</td></tr>
+          <tr><td>그림 있는 차트</td><td>${A.charts}개</td><td>${B.charts}개</td></tr></table>
+        <div class="dim" style="font-size:11.5px">한쪽에만 있는 종목의 그림은 양쪽 다 남깁니다. 고르면 다른 브라우저도 다음에 열 때 같아집니다. PC 서버는 바뀌기 전 것을 하루 한 번 data/sync_backup 폴더에 남깁니다.</div></div>
+        <footer><button class="btn left" id="syLater">나중에</button><button class="btn${recB ? ' primary' : ''}" id="syMine">이 브라우저 것 쓰기${recB ? ' (추천)' : ''}</button><button class="btn${recB ? '' : ' primary'}" id="syServer">PC 서버 것 쓰기${recB ? '' : ' (추천)'}</button></footer></div>`);
+      const done = async (mode) => {
+        d.close(); st.busy = true;
+        try {
+          const take = {};
+          if (mode === 'server') {
+            const keep = {}; for (const id of diff) if (cur[id] != null && !id.startsWith('d.')) keep[id] = cur[id];
+            try { localStorage.setItem('mc.sync.before', JSON.stringify({ at: Date.now(), sec: keep })); } catch {}   // 이 브라우저에 있던 설정 (혹시 몰라 보관)
+            for (const id of diff) { const s = j.sec[id]; if (s) take[id] = s.v; }               // 이 브라우저에만 있는 칸은 남겨서 올림
+          } else for (const id of diff) { const s = j.sec[id]; if (cur[id] == null && s && s.v != null) take[id] = s.v; }   // 서버에만 있는 그림 등은 받아 옴
+          for (const id of Object.keys(cur)) if (!diff.includes(id)) meta.base[id] = hash(cur[id]);
+          meta.rev = j.rev; const ch = apply(take); saveMeta();
+          await push(); st.state = 'on'; st.err = '';
+          if (refresh(ch, mode === 'server' ? (last.by || 'PC 서버') : 'PC 서버') !== 'reload') toast(mode === 'server' ? 'PC 서버 것으로 맞췄습니다' : '이 브라우저 것으로 맞췄습니다 · 다른 브라우저도 다음에 열 때 같아집니다', 5000);
+        } catch (e) { st.state = 'err'; st.err = e.message; }
+        finally { st.busy = false; paint(); loop(); }
+      };
+      d.querySelector('#syServer').onclick = () => done('server');
+      d.querySelector('#syMine').onclick = () => done('mine');
+      d.querySelector('#syLater').onclick = () => { d.close(); st.state = 'skip'; paint(); };
+    }
+    function loop() {
+      clearInterval(timer);
+      let k = 0;
+      timer = setInterval(async () => {
+        if (st.busy || !usable() || !['on', 'err'].includes(st.state) || document.hidden) return;
+        st.busy = true;
+        try { await push(); if (++k % 10 === 0) await pull(true); st.state = 'on'; st.err = ''; }   // 3초마다 올리고 30초마다 받기
+        catch (e) { st.state = 'err'; st.err = e.message; }
+        finally { st.busy = false; paint(); }
+      }, 3000);
+    }
+    async function start() {
+      if (PANE || st.busy || ['ask', 'on'].includes(st.state)) return;
+      if (meta.off) { st.state = 'off'; return paint(); }
+      if (!usable()) { st.state = 'nosrv'; return paint(); }
+      if (!DS.srv.version || DS.srv.version < NEED) { st.state = 'old'; return paint(); }
+      st.busy = true; let r = null;
+      try {
+        r = meta.rev == null ? await first() : await pull(false);
+        if (r !== 'ask' && r !== 'reload') { await push(); st.state = 'on'; st.err = ''; sessionStorage.removeItem('mc.syncN'); }
+      } catch (e) { st.state = 'err'; st.err = e.message; }
+      finally { st.busy = false; paint(); }
+      if (r !== 'reload') loop();
+      return r;
+    }
+    document.addEventListener('visibilitychange', async () => {
+      if (!usable() || !['on', 'err'].includes(st.state) || st.busy) return;
+      st.busy = true;
+      try { await push(); if (!document.hidden && await pull(false) === 'reload') return; st.state = 'on'; st.err = ''; }   // 나갈 때 올리고, 돌아오면 받기
+      catch (e) { st.state = 'err'; st.err = e.message; }
+      finally { st.busy = false; paint(); }
+    });
+    function label() {
+      return { idle: '', nosrv: 'PC 서버 꺼짐', old: 'PC 서버 업데이트 필요', off: '꺼 둠', ask: '고르기 기다림', skip: '이번엔 안 함', on: '켜짐', err: '오류' }[st.state] || '';
+    }
+    function paint() { const b = $('syncBadge'); if (b) { b.hidden = st.state !== 'err' && st.state !== 'ask'; b.title = '브라우저 맞춤: ' + label() + (st.err ? ' · ' + st.err : ''); } }
+    function dialog() {
+      const s = st.state, at = st.at ? new Date(st.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+      const msg = { on: `켜짐${at ? ' · 마지막으로 올린 시각 ' + at : ''}`, nosrv: 'PC 서버가 꺼져 있거나 연결이 꺼져 있습니다 (⋯ → PC 서버 연결)', old: `PC 서버가 옛 버전(${DS.srv.version || '?'})입니다 → 새 chart_server.py로 바꾸고 start_chart.bat을 다시 켜세요 (필요: ${NEED})`,
+        off: '이 브라우저에서 꺼 두었습니다', ask: '어느 쪽으로 맞출지 고르기를 기다리는 중', skip: '이번에는 맞추지 않음 (새로 열면 다시 물음)', err: '오류: ' + st.err, idle: '확인 전' }[s] || s;
+      const d = openDlg(`<div class="in"><header>브라우저 맞춤 (PC 서버)<button class="ib" data-x>✕</button></header><div class="body">
+        <div>크롬 · Claude 앱 안 브라우저 · 엣지처럼 <b>이 PC의 브라우저끼리</b> 관심목록 · 도구/차트 설정 · 지표 · 그림이 같아집니다. <b>내 PC 서버에만</b> 저장되고 홈페이지(인터넷)에는 올라가지 않습니다. 지금 보는 종목·화면 배치는 브라우저마다 따로입니다.</div>
+        <div><b>상태:</b> ${esc(msg)}</div><div class="dim" style="font-size:11.5px">이 브라우저: ${esc(who)}</div></div>
+        <footer><button class="btn left" id="syOff">${meta.off ? '이 브라우저에서 켜기' : '이 브라우저에서 끄기'}</button><button class="btn" id="syAgain">PC 서버 것과 다시 비교</button><button class="btn primary" id="syNow">지금 맞추기</button></footer></div>`);
+      d.querySelector('#syOff').onclick = () => { meta.off = !meta.off; saveMeta(); d.close(); st.state = 'idle'; if (meta.off) { st.state = 'off'; clearInterval(timer); paint(); toast('이 브라우저는 맞추지 않습니다'); } else start(); };
+      d.querySelector('#syAgain').onclick = () => { d.close(); meta = { base: {}, off: meta.off }; saveMeta(); st.state = 'idle'; start(); };
+      d.querySelector('#syNow').onclick = async () => { d.close(); if (['on', 'err'].includes(st.state)) { st.busy = true; try { await push(); await pull(false); st.state = 'on'; st.err = ''; toast('맞췄습니다'); } catch (e) { st.state = 'err'; st.err = e.message; toast('맞추지 못했습니다: ' + e.message, 5000); } finally { st.busy = false; paint(); } } else { st.state = 'idle'; start(); } };
+    }
+    return { start, dialog, label, get state() { return st.state; }, who };
+  })();
   function serverDialog() {
     const s = DS.srv, zip = serverZipUrl();
     const d = openDlg(`<div class="in"><header>주식·선물 보기 (PC 서버)<button class="ib" data-x>✕</button></header><div class="body">
@@ -5497,7 +5692,7 @@ const UI = (() => {
     d.querySelector('#srvOn').onclick = async () => {
       DS.setLocalEnabled(true); d.querySelector('#srvRes').textContent = '연결 확인 중…';
       await DS.ping(); paintSrv();
-      if (DS.srv.ok) { d.close(); toast('PC 서버 연결됨 · 주식·선물을 볼 수 있습니다'); pollYahoo(); if (ST.key.startsWith('YAHOO:')) CH.load(ST.key, ST.tf); }
+      if (DS.srv.ok) { d.close(); toast('PC 서버 연결됨 · 주식·선물을 볼 수 있습니다'); SYNC.start(); pollYahoo(); if (ST.key.startsWith('YAHOO:')) CH.load(ST.key, ST.tf); }
       else d.querySelector('#srvRes').innerHTML = '<span class="neg">연결되지 않았습니다.</span> start_chart.bat 창이 켜져 있는지, 크롬 주소창 왼쪽 아이콘 → 사이트 설정에서 로컬 네트워크(이 기기) 접근이 「허용」인지 확인하세요. 한 번 「차단」을 누르면 다시 묻지 않습니다.';
     };
     const off = d.querySelector('#srvOff');
@@ -5535,7 +5730,7 @@ const UI = (() => {
   }
   let oldWarned = false;
   { let shown = ''; USRT.onStatus(st => { if (st === 'error' && USRT.err && USRT.err !== shown) { shown = USRT.err; toast('Finnhub: ' + USRT.err + ' (⋯ → 미국 주식 실시간)', 6000); } }); }
-  async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && !DS.us.rows.length) DS.loadUS(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast(`PC 서버가 옛 버전(${DS.srv.version || '?'})입니다 → 새 파일(chart_server.py · us_universe.py · us_market.py)로 덮어쓰고 start_chart.bat을 다시 켜세요. 그 전에는 미국 종목 찾기 창·전 종목 시세·한글 검색이 비어 보입니다`, 15000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
+  async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && ['nosrv', 'err'].includes(SYNC.state)) SYNC.start(); if (DS.srv.ok && !DS.us.rows.length) DS.loadUS(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast(`PC 서버가 옛 버전(${DS.srv.version || '?'})입니다 → 새 파일(chart_server.py · us_universe.py · us_market.py)로 덮어쓰고 start_chart.bat을 다시 켜세요. 그 전에는 미국 종목 찾기 창·전 종목 시세·한글 검색이 비어 보입니다`, 15000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
   function applyTheme() {
     if (ST.theme === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', ST.theme);
   }
@@ -5655,6 +5850,18 @@ const UI = (() => {
     del: '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5l.8 9h5.4l.8-9" fill="none" stroke="currentColor"/></svg>',
     dash: '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M1 8h3M6.5 8h3M12 8h3" stroke="currentColor" stroke-width="1.6"/></svg>',
   };
+  // 크기 고르기: 글자 8~300 · 선 1~10 (지금 값이 목록에 없으면 끼워 넣음)
+  const withCur = (arr, v) => (arr.includes(+v) ? arr : [...arr, +v].sort((a, b) => a - b));
+  const TXT_SIZES = v => withCur([10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 120, 160, 200, 240, 300], v);
+  const LINE_WS = v => withCur([1, 2, 3, 4, 5, 6, 8, 10], v);
+  // 마지막에 쓴 색·두께·점선·글자 크기를 도구별로 기억 → 다음에 그 도구로 그리면 그 값으로 (트레이딩뷰처럼)
+  const STYLE_KEYS = ['color', 'w', 'dash', 'size', 'dev'];
+  function rememberStyle(d) {
+    if (!d || !d.type || d.type === 'image' || !d.style) return;
+    const o = {}, noColor = d.fib || d.type === 'long' || d.type === 'short';
+    for (const k of STYLE_KEYS) if (d.style[k] != null && !(k === 'color' && noColor)) o[k] = d.style[k];
+    ST.toolStyle = { ...(ST.toolStyle || {}), [d.type]: o }; save(); CH.setToolStyles(ST.toolStyle);
+  }
   function paintSelBar() {
     const d = CH.drawings.sel, bar = $('selbar');
     if (!d || CH.drawings.locked || CH.drawings.hidden) { bar.hidden = true; bar.dataset.id = ''; return; }
@@ -5662,8 +5869,8 @@ const UI = (() => {
     bar.hidden = false; bar.dataset.id = d.id;
     bar.innerHTML = `<span class="nm">${esc(toolName(d.type))}</span>
       ${noColor ? '' : `<label class="sw" title="색" style="--c:${col}"><input type="color" data-k="color" value="${col}"></label>`}
-      ${d.type === 'text' || d.type === 'callout' ? `<select data-k="size" title="글자 크기">${[10, 12, 14, 18, 24, 32, 48, 64, 96, 128, 160, 200].map(v => `<option value="${v}"${(d.style.size || 14) == v ? ' selected' : ''}>${v}</option>`).join('')}</select>`
-        : `<select data-k="w" title="두께">${[1, 2, 3, 4].map(v => `<option value="${v}"${d.style.w == v ? ' selected' : ''}>${v}px</option>`).join('')}</select>
+      ${d.type === 'text' || d.type === 'callout' ? `<select data-k="size" title="글자 크기">${TXT_SIZES(d.style.size || 14).map(v => `<option value="${v}"${(d.style.size || 14) == v ? ' selected' : ''}>${v}</option>`).join('')}</select>`
+        : `<select data-k="w" title="두께">${LINE_WS(d.style.w || 1).map(v => `<option value="${v}"${d.style.w == v ? ' selected' : ''}>${v}px</option>`).join('')}</select>
       <button data-k="dash" class="${d.style.dash ? 'on' : ''}" title="점선">${SB_ICON.dash}</button>`}
       <i class="sep"></i><button data-a="set" title="설정 (두 번 클릭)">${SB_ICON.set}</button><button data-a="dup" title="복제">${SB_ICON.dup}</button><button data-a="del" title="삭제 (Delete)">${SB_ICON.del}</button>`;
   }
@@ -5674,11 +5881,11 @@ const UI = (() => {
       const d = cur(), k = e.target.dataset.k; if (!d || !k) return;
       if (k === 'w') d.style = { ...d.style, w: +e.target.value };
       if (k === 'size') d.style = { ...d.style, size: +e.target.value };
-      CH.saveDrawings(); CH.redraw();
+      CH.saveDrawings(); CH.redraw(); rememberStyle(d);
     });
     bar.addEventListener('click', e => {
       const b = e.target.closest('button'); const d = cur(); if (!b || !d) return;
-      if (b.dataset.k === 'dash') { d.style = { ...d.style, dash: !d.style.dash }; CH.saveDrawings(); CH.redraw(); }
+      if (b.dataset.k === 'dash') { d.style = { ...d.style, dash: !d.style.dash }; CH.saveDrawings(); CH.redraw(); rememberStyle(d); }
       if (b.dataset.a === 'set') drawingDialog(d);
       if (b.dataset.a === 'dup') CH.duplicate(d);
       if (b.dataset.a === 'del') CH.deleteSelected();
@@ -6089,9 +6296,10 @@ const UI = (() => {
       ['하단 시세 띠 종목', editTape],
       DS.HOSTED ? ['PC 서버 연결 (주식·선물)', serverDialog]
         : ['PC 서버 다시 확인', async () => { await DS.ping(); paintSrv(); toast(DS.srv.ok ? 'PC 서버 연결됨' : 'PC 서버가 꺼져 있습니다'); }],
+      ['브라우저 맞춤 (관심목록·설정·그림)' + (SYNC.label() ? ' · ' + SYNC.label() : ''), SYNC.dialog],
       ['단축키 보기', () => openDlg(`<div class="in"><header>단축키<button class="ib" data-x>✕</button></header><div class="body"><dl style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0">
         <dt><b>아무 글자</b></dt><dd>심볼 검색 열기</dd><dt><b>↑ ↓</b></dt><dd>오른쪽 목록 이전·다음 종목</dd><dt><b>Alt+T / Alt+H / Alt+F</b></dt><dd>추세선 / 수평선 / 피보 되돌림</dd>
-        <dt><b>Delete</b></dt><dd>선택한 그림 지우기</dd><dt><b>Ctrl+Z / Ctrl+Y</b></dt><dd>그림 되돌리기 / 다시 하기</dd><dt><b>Esc</b></dt><dd>그리기 취소 · 선택 해제</dd><dt><b>그림 두 번 누르기</b></dt><dd>그림 설정</dd><dt><b>오른쪽 클릭</b></dt><dd>그림 · 차트 · 가격 축 · 지표 메뉴</dd><dt><b>/</b></dt><dd>지표 추가</dd><dt><b>도구 오른쪽 아래 ◢ · 오른쪽 클릭</b></dt><dd>같은 묶음 도구 모두 보기</dd>
+        <dt><b>Delete</b></dt><dd>선택한 그림 지우기</dd><dt><b>Ctrl+Z / Ctrl+Y</b></dt><dd>그림 되돌리기 / 다시 하기</dd><dt><b>Esc · 오른쪽 클릭</b></dt><dd>그리기 도구 풀기 · 그리던 것 취소</dd><dt><b>Esc</b></dt><dd>선택 해제</dd><dt><b>그림 두 번 누르기</b></dt><dd>그림 설정</dd><dt><b>오른쪽 클릭</b></dt><dd>그림 · 차트 · 가격 축 · 지표 메뉴</dd><dt><b>/</b></dt><dd>지표 추가</dd><dt><b>도구 오른쪽 아래 ◢ · 오른쪽 클릭</b></dt><dd>같은 묶음 도구 모두 보기</dd>
         <dt><b>범례 이름 두 번 누르기</b></dt><dd>지표 설정</dd><dt><b>Alt+R</b></dt><dd>차트 맞추기</dd></dl></div></div>`)],
     ]);
   }
@@ -6172,7 +6380,7 @@ const UI = (() => {
     CH.init($('chart'), $('legend'), { layout: ST.layouts[ST.layoutId] || (ST.layoutId === 'full' ? null : ST.layout), fibTemplate: ST.fibTemplate, log: ST.log, magnet: ST.magnet, cfg: ST.chartCfg, onChange: onChartChange,
       saveLayout: l => { ST.layout = l; ST.layouts[ST.layoutId] = l; save(); }, scanInfo: k => scanIdx[k] || null });
     bindFav(); bindRanges(); renderFav(); paintScale(); bindSelBar(); bindTvLinks(); bindDetailGrip();
-    applyKrColor(false); CH.setTopExtra(topExtra);
+    applyKrColor(false); CH.setTopExtra(topExtra); CH.setToolStyles(ST.toolStyle);
     MKT.paint(); setInterval(MKT.paint, 30000); $('mkt').onclick = () => openSearch({ filter: 'usb' });
     paintTape(); setInterval(paintTape, 1500); $('tape').onclick = e => { const t = e.target.closest('[data-k]'); if (t) openChart(t.dataset.k); };
     watchServer();
@@ -6192,6 +6400,10 @@ const UI = (() => {
     DS.streamTickers(u => { Object.assign(px, u); paintPrices(); });
     if (DS.srv.ok == null) await DS.ping();
     paintSrv();
+    // 브라우저 맞춤: 이 PC의 다른 브라우저가 PC 서버에 올린 관심목록·설정·그림 받기 (설정이 바뀌었으면 한 번 새로 열림)
+    { const m = sessionStorage.getItem('mc.syncMsg'); if (m) { sessionStorage.removeItem('mc.syncMsg'); setTimeout(() => toast(`${m}에서 바꾼 관심목록·설정을 불러왔습니다`, 5000), 900); } }
+    $('syncBadge').onclick = () => SYNC.dialog();
+    if (await Promise.race([SYNC.start(), new Promise(r => setTimeout(() => r('slow'), 4000))]) === 'reload') return;
     // 링크로 열기: ?symbol=BTCUSDT.P&tf=1M (트레이딩뷰식 이름 · TOP2 홈페이지 차트 메뉴). 지금 차트만 바뀌고 관심목록은 그대로
     try {
       const lp = new URLSearchParams(location.search), lsym = lp.get('symbol'), lkey = lp.get('key'), ltf = lp.get('tf');
@@ -6215,7 +6427,7 @@ const UI = (() => {
     document.body.insertAdjacentHTML('beforeend', '<div class="chartMsg" style="position:fixed"><div><b>차트 엔진을 불러오지 못했습니다</b>인터넷 연결을 확인하세요. 회사·학교망에서는 cdn.jsdelivr.net, unpkg.com 접속이 막혀 있을 수 있습니다.</div></div>');
   }
 
-  return { MKT, alpacaDialog, boot, libFailed, toast, openChart, useLayout, openSearch, indicatorDialog, drawingDialog, chartContext, legendContext, showMenuAt, renderTv, TOOL_DEF, TOOL_GROUPS, setScanResults, setDiscResults, newListFrom, curList, setView,
+  return { MKT, SYNC, alpacaDialog, boot, libFailed, toast, openChart, useLayout, openSearch, indicatorDialog, drawingDialog, chartContext, legendContext, showMenuAt, renderTv, TOOL_DEF, TOOL_GROUPS, setScanResults, setDiscResults, newListFrom, curList, setView,
     confirmBox, download, fpx, fpc, fbig, esc, px, ST, save, tvSymbol, get scan() { return scan; }, get disc() { return disc; } };
 })();
 
