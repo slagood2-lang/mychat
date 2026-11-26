@@ -141,6 +141,30 @@ async function run(list0) {
   await page.waitForFunction(() => typeof CH !== 'undefined' && CH.state.key === 'BINANCE:NEWUSDT' && CH.state.tf === '1w' && CH.data.N > 0, null, { timeout: 30000 }).catch(() => {});
   const lk = await page.evaluate(() => ({ key: CH.state.key, tf: CH.state.tf, url: location.search, bar: document.querySelector('#tfBar .tb.on')?.dataset.tf }));
   ok(lk.key === 'BINANCE:NEWUSDT' && lk.tf === '1w' && lk.bar === '1w' && lk.url === '', `링크로 열기 ?symbol=NEWUSDT.P&tf=1w → ${lk.key} ${lk.tf} · 주소 정리됨(${JSON.stringify(lk.url)})`);
+  // 차트가 숨어 있을 때(다른 화면·숨은 탭) 월봉을 열고 나중에 보이면: 봉이 오른쪽 끝에 몰리지 않아야 함
+  const hid = await page.evaluate(async () => {
+    const vc = document.getElementById('viewChart'); vc.hidden = true;
+    await CH.load('BINANCE:BTCUSDT', '1M');
+    const hiddenW = CH.chart.timeScale().width();
+    vc.hidden = false;
+    await new Promise(r => setTimeout(r, 900));
+    const ts = CH.chart.timeScale(), r = ts.getVisibleLogicalRange(), n = CH.data.N;
+    const x0 = ts.logicalToCoordinate(0);
+    return { hiddenW, n, from: r.from, to: r.to, sp: ts.options().barSpacing, x0, w: ts.width() };
+  });
+  ok(hid.hiddenW === 0 && hid.to - hid.from < hid.n + 20 && hid.sp >= 2 && hid.x0 > 0 && hid.x0 < hid.w * 0.3,
+    `숨은 채로 월봉을 열고 나중에 보여도 봉이 폭을 채움 (봉 ${hid.n}개, 보이는 칸 ${(hid.to - hid.from).toFixed(1)}, 봉 폭 ${hid.sp.toFixed(1)}px, 첫 봉 x=${hid.x0 && hid.x0.toFixed(0)}/${hid.w})`);
+  // 다른 화면에 있다가 차트 화면으로 돌아와도 (화면 버튼 → render(true))
+  const hid2 = await page.evaluate(async () => {
+    document.querySelector('#views [data-view="scan"]').click();
+    await CH.load('BINANCE:BTCUSDT', '1y');
+    document.querySelector('#views [data-view="chart"]').click();
+    await new Promise(r => setTimeout(r, 900));
+    const ts = CH.chart.timeScale(), r = ts.getVisibleLogicalRange();
+    return { n: CH.data.N, span: r.to - r.from, sp: ts.options().barSpacing, x0: ts.logicalToCoordinate(0), w: ts.width() };
+  });
+  ok(hid2.span < Math.max(hid2.n + 20, hid2.w / 40 + 2) && hid2.x0 > 0 && hid2.sp <= 41,
+    `스캐너 화면에서 년봉을 열고 차트 화면으로 와도 정상 (봉 ${hid2.n}개, 보이는 칸 ${hid2.span.toFixed(1)}, 봉 폭 ${hid2.sp.toFixed(1)}px)`);
   const lists1 = await page.evaluate(() => JSON.parse(localStorage.getItem('mc.v1')).lists);
   ok(JSON.stringify(lists1) === JSON.stringify(listsStart), '끝까지 관심목록 그대로 (' + lists1.map(l => l.name + ' ' + l.items.length).join(' · ') + ')');
   ok(errs.length === 0, '페이지 오류 없음 ' + JSON.stringify(errs.slice(0, 3)));
