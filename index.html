@@ -79,6 +79,36 @@ button{cursor:pointer}
 .ranges button:hover,.rb:hover{background:var(--chip)}
 .rb.on{color:var(--accent);font-weight:700}
 .clock{font:12px var(--f-mono);color:var(--muted);padding:0 8px;white-space:nowrap}
+.tape{flex:1;min-width:0;display:flex;gap:14px;overflow:hidden;white-space:nowrap;font:11.5px var(--f-mono);padding:0 10px;mask-image:linear-gradient(90deg,#000 92%,transparent)}
+.tape span{cursor:pointer;color:var(--muted)} .tape span b{color:var(--fg);font-weight:600;margin:0 4px} .tape span:hover b{text-decoration:underline}
+.mkt{display:flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--muted);font:12px var(--f-body);padding:4px 8px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.mkt:hover{background:var(--chip)} .mkt i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.mkt.pre i{background:#a78bfa} .mkt.regular i{background:#22c55e;box-shadow:0 0 0 3px #22c55e33} .mkt.after i{background:#f59e0b}
+@media (max-width:900px){.mkt span{display:none}}
+.row.fl-up{animation:flu .8s} .row.fl-dn{animation:fld .8s}
+@keyframes flu{from{background:color-mix(in srgb,var(--up) 22%,transparent)}} @keyframes fld{from{background:color-mix(in srgb,var(--down) 22%,transparent)}}
+.dlg.wide{width:min(880px,calc(100vw - 24px))}
+.usb{display:flex;flex-direction:column;gap:8px;min-height:0}
+.usb-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 -14px;padding:0 14px}
+.usb-tabs button{border:0;background:transparent;color:var(--muted);padding:6px 10px;font:600 12.5px var(--f-body);border-bottom:2px solid transparent;cursor:pointer}
+.usb-tabs button.on{color:var(--fg);border-bottom-color:var(--accent)} .usb-tabs small{font-weight:400;margin-left:4px;color:var(--muted)}
+.usb-chips{display:flex;gap:4px;flex-wrap:wrap} .usb-chips:empty{display:none}
+.usb-chips button{font-size:11.5px;padding:3px 9px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.usb-chips button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)} .usb-chips small{opacity:.7;margin-left:3px}
+.usb-head,.usr{display:grid;grid-template-columns:minmax(0,1fr) 70px 78px 86px 72px 80px 24px;gap:8px;align-items:center}
+.usb-head{font-size:11px;color:var(--muted);padding:0 0 4px;border-bottom:1px solid var(--line)} .usb-head .r,.usr .r{text-align:right}
+.usb-list{position:relative;overflow-y:auto;height:min(52vh,460px);margin:0 -14px}
+.usb-rows{position:absolute;left:0;right:0;top:0}
+.usr{position:absolute;left:0;right:0;height:42px;padding:0 14px;cursor:pointer;font-variant-numeric:tabular-nums}
+.usr:hover,.usr.act{background:var(--chip)}
+.usr .nm{display:flex;align-items:center;gap:8px;min-width:0} .usr .nm>div{min-width:0}
+.usr .t{font:600 12.5px var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .usr .t small{font:400 12px var(--f-body);margin-left:6px;color:var(--fg)}
+.usr .e{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.usr .x{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.usr .p{font:600 12.5px var(--f-mono)} .usr svg{display:block}
+.usr .addst{font-size:15px;padding:0;border:0;background:transparent;color:var(--muted);cursor:pointer} .usr .addst.on{color:#f5b301}
+.usb-foot{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.usb-empty{padding:40px 10px;text-align:center;color:var(--muted)}
 .favbar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:2px 4px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
 .favbar[hidden]{display:none!important}
 #favTools{display:flex;gap:2px;align-items:center}
@@ -430,6 +460,7 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
     <button class="tb chart-only" id="cfgBtn" title="차트 설정"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 1.5v2.2M9 14.3v2.2M1.5 9h2.2M14.3 9h2.2M3.7 3.7l1.6 1.6M12.7 12.7l1.6 1.6M3.7 14.3l1.6-1.6M12.7 5.3l1.6-1.6" stroke="currentColor" stroke-width="1.3"/></svg></button>
     <span class="grow"></span>
     <nav class="views" id="views"><button data-view="chart">차트</button><button data-view="scan">스캐너</button><button data-view="disc">종목 찾기</button><button data-view="tv" title="트레이딩뷰 무료 위젯으로 같은 종목 보기">TV 원본</button></nav>
+    <button class="mkt" id="mkt" type="button" title="미국 주식 장 상태 (뉴욕 시간 · 휴장일·조기폐장 반영) · 누르면 미국 주식 탐색"><i></i><span></span></button>
     <button class="srv" id="srv" type="button"><i></i><span>서버 확인 중</span></button>
     <button class="tb" id="menuBtn" title="설정·백업">⋯</button>
   </header>
@@ -458,7 +489,7 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
       </div>
       <div class="rangebar" id="rangebar">
         <div class="ranges" id="ranges"></div>
-        <span class="grow"></span>
+        <div class="tape" id="tape" title="하단 시세 띠 · 누르면 차트 (⋯ → 「하단 시세 띠 종목」에서 바꾸기)"></div>
         <span class="clock" id="clock"></span>
         <button class="rb" data-scale="pct" title="퍼센트 스케일">%</button><button class="rb" data-scale="log" title="로그 스케일">log</button><button class="rb" data-scale="normal" title="일반 스케일">일반</button>
       </div>
@@ -2111,6 +2142,27 @@ const DS = (() => {
       .map(([, , r]) => ({ key: 'YAHOO:' + r[0], id: r[0], name: r[1] ? `${r[1]} · ${r[2]}` : r[2], exch: `${r[3]}${US_TYPE[r[4]] ? ' · ' + US_TYPE[r[4]] : ''}` }));
   }
 
+  // 미국 시세판 (PC 서버 /api/us/board): 기호 → [가격, 전일종가, 거래대금$, 거래량, 시각ms, 고가, 저가]
+  const board = { rows: new Map(), v: 0, mode: '', session: '', count: 0, at: 0, stat: null };
+  function boardApply(j, all) {
+    for (const r of j.rows || []) board.rows.set(r[0], r.slice(1));
+    if (all) board.v = j.v || board.v;
+    board.mode = j.mode; board.session = j.session; board.count = j.count; board.stat = j.stat; board.at = Date.now();
+    return j;
+  }
+  const boardAll = () => api('/api/us/board', board.v ? { since: board.v } : {}).then(j => boardApply(j, true));
+  const boardSyms = syms => syms.length ? api('/api/us/board', { symbols: syms.join(',') }).then(j => boardApply(j, false)) : Promise.resolve(null);
+  const usSpark = syms => api('/api/us/spark', { symbols: syms.join(',') });
+  async function post(path, body) {
+    if (!srv.enabled) throw new Error(OFF_MSG());
+    let r;
+    try { r = await sfetch(`${SERVER}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
+    catch { srv.ok = false; throw new Error(OFF_MSG()); }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+    return j;
+  }
+
   let cbSet = null;   // 코인베이스 달러 종목 (부팅 때 받음)
   function loadCoinbase() { return LONG.cbProducts().then(m => { cbSet = m; DS.cbTick = m; return m; }); }
   function localSearch(q, limit = 30) {
@@ -2337,7 +2389,7 @@ const DS = (() => {
   function reconnect() { for (const f of wakeSubs) try { f(); } catch {} }
   return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
     resolveSync, resolve, search, localSearch, klines, cachedKlines, recent, streamKline, streamTickers, binanceTickers, yahooQuotes,
-    cgMarkets, cgTrending, KR_NAMES, us, loadUS, usSearch };
+    cgMarkets, cgTrending, KR_NAMES, us, loadUS, usSearch, board, boardAll, boardSyms, usSpark, post };
 })();
 
 // ============================================================
@@ -2417,9 +2469,9 @@ const USRT = (() => {
   const qc = new Map(); let q = Promise.resolve(), lastCall = 0;
   function quote(sym, tk = token) {
     const c = qc.get(sym); if (c && Date.now() - c.at < 20000 && tk === token) return Promise.resolve(c.v);
-    const job = q.then(async () => {
-      const wait = lastCall + 1100 - Date.now(); if (wait > 0) await new Promise(r => setTimeout(r, wait));
-      lastCall = Date.now();
+    const fresh = tk !== token;   // 새 키 확인: 한 번뿐이라 줄 서지 않고 바로 (시세 줄이 길어도 확인 결과가 늦지 않게)
+    const run = async () => {
+      if (!fresh) { const wait = lastCall + 1100 - Date.now(); if (wait > 0) await new Promise(r => setTimeout(r, wait)); lastCall = Date.now(); }
       const r = await fetch(`${API}/quote?symbol=${encodeURIComponent(sym)}&token=${encodeURIComponent(tk)}`);
       if (r.status === 401 || r.status === 403) throw new Error('키가 맞지 않거나 이 자료를 볼 수 없는 요금제입니다 (' + r.status + ')');
       if (r.status === 429) throw new Error('요청 한도 초과 (분당 60회). 잠시 뒤 다시 됩니다');
@@ -2429,7 +2481,9 @@ const USRT = (() => {
       const v = { price: +j.c, prev: +j.pc || null, chgPct: +j.pc ? (j.c / j.pc - 1) * 100 : null, at: (+j.t || 0) * 1000 };
       if (tk === token) qc.set(sym, { at: Date.now(), v });
       return v;
-    });
+    };
+    if (fresh) return run();
+    const job = q.then(run);
     q = job.catch(() => {});
     return job;
   }
@@ -3955,18 +4009,21 @@ const CH = (() => {
     updateLegendValues(null);
     paintFunding();
   }
-  // 맨 윗줄에 펀딩비 · 남은 시간 (바이낸스 선물 종목)
-  let fundT = 0, fundInfo = null;
+  // 맨 윗줄에 펀딩비 · 남은 시간 (바이낸스 선물 종목) + 앱이 주는 추가 정보 (미국 주식 전일 종가·범위·거래량, 코인 김프)
+  let fundT = 0, fundInfo = null, topExtra = () => '';
   function paintFunding() {
     const el = legend && legend.querySelector('.lg-main .fund'); if (!el) return;
     const id = DS.perpOf(S.key), key = S.key;
+    const extra = () => { try { return topExtra(S.key) || ''; } catch { return ''; } };
     const show = () => {
-      const e2 = legend.querySelector('.lg-main .fund'); if (!e2 || !fundInfo || fundInfo.key !== S.key) { if (e2) e2.textContent = ''; return; }
+      const e2 = legend.querySelector('.lg-main .fund'); if (!e2) return;
+      if (!fundInfo || fundInfo.key !== S.key) { e2.innerHTML = extra(); return; }
       const sec = Math.max(0, Math.round((fundInfo.next - Date.now()) / 1000)), h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), ss = sec % 60;
-      e2.innerHTML = `펀딩 <b style="color:${fundInfo.rate < 0 ? css('--down') : css('--up')}">${(fundInfo.rate * 100).toFixed(4)}%</b> · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+      const x = extra();
+      e2.innerHTML = `펀딩 <b style="color:${fundInfo.rate < 0 ? css('--down') : css('--up')}">${(fundInfo.rate * 100).toFixed(4)}%</b> · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}${x ? ' · ' + x : ''}`;
     };
     clearInterval(fundT);
-    if (!id) { fundInfo = null; el.textContent = ''; return; }
+    if (!id) { fundInfo = null; show(); fundT = setInterval(() => { if (S.key !== key) return clearInterval(fundT); show(); }, 2000); return; }
     const get = () => DERIV.premium(id).then(p => { if (S.key === key && p && isFinite(p.rate)) { fundInfo = { key, rate: p.rate, next: p.next }; show(); } }).catch(() => {});
     show(); get(); let n = 0;
     fundT = setInterval(() => { if (S.key !== key) return clearInterval(fundT); show(); if (++n % 30 === 0 || (fundInfo && fundInfo.next < Date.now())) get(); }, 1000);
@@ -4157,7 +4214,7 @@ const CH = (() => {
   function goLatest() { chart && chart.timeScale().scrollToRealTime(); }
   function fit() { chart && chart.timeScale().fitContent(); }
 
-  return { init, load, render, undo, redo, setLayout, debugOverlay: id => overlay && overlay.layers.get(id), FULL_LAYOUT, DEFAULT_LAYOUT, addDrawing, duplicate, finishCreate, POLY, TOOL_N, toggleIndicator, removeIndicator, autoScale, selectDrawing, FIBEXT_LEVELS, FIBCH_LEVELS, setLog, setScale, setConfig, setRange, setLocked, setHidden, CFG_DEFAULT, get cfg() { return cfg; }, setMagnet, setTool, deleteSelected, clearDrawings, cancelCreate, addIndicator, updateIndicator, resetLayout,
+  return { setTopExtra: f => { topExtra = f; }, init, load, render, undo, redo, setLayout, debugOverlay: id => overlay && overlay.layers.get(id), FULL_LAYOUT, DEFAULT_LAYOUT, addDrawing, duplicate, finishCreate, POLY, TOOL_N, toggleIndicator, removeIndicator, autoScale, selectDrawing, FIBEXT_LEVELS, FIBCH_LEVELS, setLog, setScale, setConfig, setRange, setLocked, setHidden, CFG_DEFAULT, get cfg() { return cfg; }, setMagnet, setTool, deleteSelected, clearDrawings, cancelCreate, addIndicator, updateIndicator, resetLayout,
     rethemed, screenshot, redraw, addImage, saveDrawings, saveFibTemplate, goLatest, fit, TYPES, FIB_DEFAULT,
     get state() { return S; }, get layout() { return layout; }, get drawings() { return draw; }, get chart() { return chart; }, get data() { return D; },
     get fibTemplate() { return fibTemplate; }, refreshScanZones() { for (const h of handles) if (h.inst?.type === 'zones' && h.fill) h.fill(); refreshLegend(); } };
@@ -4202,6 +4259,14 @@ const UI = (() => {
     }
     if (!ST.lists.some(l => l.items.includes('COINBASE:BTCUSD'))) { const L = ST.lists[0]; const i = L.items.indexOf('BINANCE:BTCUSDT'); L.items.splice(i < 0 ? 0 : i + 1, 0, 'COINBASE:BTCUSD'); }
     for (const l of FULL_LISTS()) if (!ST.lists.some(x => x.name === l.name)) ST.lists.push(l);
+  }
+  // v5: PC(localhost:8000)에서 쓰던 「내 관심목록」(프로젝트 백업 2026-11-24)을 따로 한 목록으로 — 지금 목록은 건드리지 않음
+  if (!ST.v5) {
+    ST.v5 = 1;
+    const PC_LIST = ['BINANCE:BTCUSDT', 'COINBASE:BTCUSD', 'BINANCE:ETHUSDT', 'BINANCE:SOLUSDT', 'BINANCE:XRPUSDT', '###선물·지수', 'YAHOO:SI=F', 'YAHOO:GC=F',
+      'YAHOO:NQ=F', 'YAHOO:^GSPC', 'YAHOO:DX-Y.NYB', '###미국', 'YAHOO:NVDA', 'YAHOO:AAPL', 'YAHOO:TSLA', '###한국', 'YAHOO:005930.KS', 'YAHOO:000660.KS'];
+    const has = l => PC_LIST.every(k => l.items.includes(k));
+    if (!ST.lists.some(has)) ST.lists.push({ name: '내 관심목록 (PC에서 쓰던 것)', items: PC_LIST });
   }
   // v4: TD 카운트다운 13 숨김 (트레이딩뷰 TD 스크립트처럼) · FBB(숨김) 추가
   if (!ST.v4) {
@@ -4259,6 +4324,7 @@ const UI = (() => {
   const dlg = () => $('dlg');
   function openDlg(html) {
     const d = dlg(); if (d.open) d.close();
+    d.classList.remove('wide');
     d.innerHTML = html; d.showModal();
     d.querySelectorAll('[data-x]').forEach(b => b.onclick = () => d.close());
     return d;
@@ -4297,14 +4363,24 @@ const UI = (() => {
   }
 
   // ---------------- 심볼 검색 ----------------
-  function openSearch({ mode = 'open', initial = '' } = {}) {
+  function openSearch({ mode = 'open', initial = '', filter = null } = {}) {
     const d = openDlg(`<div class="in"><header>${mode === 'add' ? '관심목록에 심볼 추가' : '심볼 검색'}<button class="ib" data-x>✕</button></header>
       <div class="body"><input id="sq" placeholder="BTC · 비트코인 · XAUUSD · SI1! · AAPL · 삼성전자 · NASDAQ:TSLA" autocomplete="off" spellcheck="false">
-      <div class="srf" id="srf">${[['all', '전체'], ['perp', '크립토 선물'], ['spot', '현물'], ['crypto', '달러 (CRYPTO · 코인베이스)'], ['stock', '주식 · ETF'], ['cmd', '원자재 · 지수'], ['kr', '한국']].map(([k, n]) => `<button data-f="${k}"${k === 'all' ? ' class="on"' : ''}>${n}</button>`).join('')}</div>
-      <div class="sr-list" id="srl"></div>
+      <div class="srf" id="srf">${[['all', '전체'], ['perp', '크립토 선물'], ['spot', '현물'], ['crypto', '달러 (CRYPTO · 코인베이스)'], ['stock', '주식 · ETF'], ['cmd', '원자재 · 지수'], ['kr', '한국'], ['usb', '🇺🇸 미국 탐색 (테마·섹터·ETF)']].map(([k, n]) => `<button data-f="${k}">${n}</button>`).join('')}</div>
+      <div class="sr-list" id="srl"></div><div class="usb" id="usb" hidden></div>
       <div class="dim" style="font-size:11.5px">SI1! 은, GC1! 금, CL1! 원유, NQ1! 나스닥 선물 · SPX, KOSPI, DXY · 6자리 숫자는 한국 주식. 미국·한국 주식과 선물은 PC 서버가 켜져 있어야 열립니다.</div></div></div>`);
     const inp = d.querySelector('#sq'), list = d.querySelector('#srl');
-    let all = [], items = [], act = 0, seq = 0, tmr = null, filt = 'all';
+    let all = [], items = [], act = 0, seq = 0, tmr = null, filt = filter || (initial ? 'all' : (uls.get('mc.srchF') === 'usb' ? 'usb' : 'all'));
+    d.classList.add('wide');
+    const board = usBoard(d, inp, key => { if (mode === 'add') { toggleInList(key); return; } d.close(); openChart(key); }, key => toggleInList(key));
+    d.addEventListener('close', () => board.hide(), { once: true });
+    const setFilt = f => {
+      filt = f; uls.set('mc.srchF', f === 'usb' ? 'usb' : 'all');
+      d.querySelectorAll('#srf button').forEach(x => x.classList.toggle('on', x.dataset.f === f));
+      list.hidden = f === 'usb';
+      if (f === 'usb') board.show(); else { board.hide(); act = 0; paint(); }
+      inp.focus();
+    };
     const inList = k => k && curList().items.includes(k);
     // 트레이딩뷰처럼 종류별 거르기
     const kindOf = x => {
@@ -4323,7 +4399,7 @@ const UI = (() => {
         : `<div class="empty">${inp.value ? (all.length ? '이 종류에는 없음' : '찾는 중…') : '종목 코드나 이름을 입력하세요'}</div>`;
       list.querySelector('.sr.act')?.scrollIntoView({ block: 'nearest' });
     };
-    d.querySelector('#srf').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; filt = b.dataset.f; d.querySelectorAll('#srf button').forEach(x => x.classList.toggle('on', x === b)); act = 0; paint(); inp.focus(); };
+    d.querySelector('#srf').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; setFilt(b.dataset.f); };
     const update = () => {
       const q = inp.value.trim(), my = ++seq;
       all = []; act = 0;
@@ -4351,8 +4427,9 @@ const UI = (() => {
       if (add || mode === 'add') { toggleInList(key); paint(); if (mode === 'add' && !add) d.close(); return; }
       d.close(); openChart(key);
     };
-    inp.addEventListener('input', update);
+    inp.addEventListener('input', () => filt === 'usb' ? board.filter(inp.value) : update());
     inp.addEventListener('keydown', e => {
+      if (filt === 'usb') { board.key(e); return; }
       if (e.key === 'ArrowDown') { act = Math.min(items.length - 1, act + 1); paint(); e.preventDefault(); }
       if (e.key === 'ArrowUp') { act = Math.max(0, act - 1); paint(); e.preventDefault(); }
       if (e.key === 'Enter') { e.preventDefault(); if (items.length) choose(act); else if (inp.value.trim()) DS.resolve(inp.value).then(k => k ? (d.close(), mode === 'add' ? toggleInList(k) : openChart(k)) : toast('종목을 찾지 못했습니다')); }
@@ -4361,7 +4438,241 @@ const UI = (() => {
       const a = e.target.closest('[data-add]'); if (a) { e.stopPropagation(); choose(+a.dataset.add, true); return; }
       const r = e.target.closest('.sr'); if (r) choose(+r.dataset.i);
     });
-    inp.value = initial; inp.focus(); update();
+    inp.value = initial; inp.focus(); update(); setFilt(filt);
+  }
+
+
+  // ---------------- 미국 주식 탐색 (웨돔 종목 찾기 창처럼: 전체·관심·테마·섹터·ETF · 거래대금순 · 실시간) ----------------
+  const uls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  const USB_ROW = 42, usbState = { tab: uls.get('mc.usbTab') || 'all', chip: {} }, sparkMem = new Map();
+  function sparkSvg(a, up) {
+    if (!a || a.length < 2) return '<svg width="64" height="22"></svg>';
+    let mn = Infinity, mx = -Infinity; for (const v of a) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    const pts = a.map((v, i) => `${(i / (a.length - 1) * 64).toFixed(1)},${(20 - ((v - mn) / ((mx - mn) || 1)) * 18).toFixed(1)}`).join(' ');
+    return `<svg width="64" height="22"><polyline fill="none" stroke="${up ? 'var(--up)' : 'var(--down)'}" stroke-width="1.3" points="${pts}"/></svg>`;
+  }
+  function usBoard(d, inp, onPick, onStar) {
+    const box = d.querySelector('#usb');
+    box.innerHTML = `<div class="usb-tabs"></div><div class="usb-chips"></div>
+      <div class="usb-head"><span>종목</span><span>오늘</span><span>거래소</span><span class="r">가격</span><span class="r">변동%</span><span class="r">거래대금</span><span></span></div>
+      <div class="usb-list"><div class="usb-sp"></div><div class="usb-rows"></div></div>
+      <div class="usb-foot"><span class="mk"></span><span class="grow"></span><span class="info"></span></div>`;
+    const q1 = sel => box.querySelector(sel), listEl = q1('.usb-list');
+    let list = [], act = 0, q = '', timers = [], on = false, sparkT = 0, scrollT = 0;
+    const by = sym => DS.us.by.get(sym), brow = sym => DS.board.rows.get(sym);
+    const chgOf = sym => { const r = brow(sym); return r && r[0] != null && r[1] ? (r[0] / r[1] - 1) * 100 : null; };
+    const dvOf = sym => (brow(sym) || [])[2] || 0;
+    const favSyms = () => curList().items.filter(k => k.startsWith('YAHOO:') && DS.us.by.has(k.slice(6))).map(k => k.slice(6));
+    const groups = () => DS.us.groups || { theme: [], sector: [], etf: [] };
+    const paintTabs = () => { q1('.usb-tabs').innerHTML = tabs().map(([id, nm, c]) => `<button data-t="${id}" class="${usbState.tab === id ? 'on' : ''}">${nm}<small>${c.toLocaleString()}</small></button>`).join(''); };
+    function tabs() {
+      const g = groups(), n = a => a.reduce((t, x) => t + x.syms.length, 0);
+      return [['all', '전체', DS.us.rows.filter(r => r[4] === 'cs' || r[4] === 'etf').length], ['fav', '관심목록', favSyms().length],
+        ['theme', '테마', g.theme.filter(x => x.syms.length).length], ['sector', '섹터', n(g.sector)], ['etf', 'ETF', n(g.etf)]];
+    }
+    function build(resetScroll = true) {
+      const g = groups(), t = usbState.tab;
+      paintTabs();
+      const secs = t === 'theme' ? g.theme.filter(x => x.syms.length) : t === 'sector' ? g.sector.filter(x => x.syms.length) : t === 'etf' ? g.etf : null;
+      let chip = usbState.chip[t]; if (secs && !secs.some(x => x.id === chip)) chip = usbState.chip[t] = secs[0] && secs[0].id;
+      q1('.usb-chips').innerHTML = secs ? secs.map(x => `<button data-c="${x.id}" class="${x.id === chip ? 'on' : ''}">${esc(x.name)}<small>${x.syms.length.toLocaleString()}</small></button>`).join('') : '';
+      let base = t === 'fav' ? favSyms() : secs ? ((secs.find(x => x.id === chip) || {}).syms || []) : DS.us.rows.filter(r => r[4] === 'cs' || r[4] === 'etf').map(r => r[0]);
+      if (q) {
+        const up = q.toUpperCase().replace(/\s/g, '');
+        base = base.filter(sym => { const r = by(sym); return sym.startsWith(up) || (r && ((r[1] && r[1].replace(/\s/g, '').toUpperCase().includes(up)) || (up.length >= 2 && r[2].toUpperCase().includes(up)))); });
+      }
+      // 테마·관심목록은 정한 순서, 나머지는 거래대금 큰 순 (웨돔과 같음)
+      list = (t === 'theme' || t === 'fav') && !q ? base.slice() : base.slice().sort((a, b) => dvOf(b) - dvOf(a));
+      act = 0; q1('.usb-sp').style.height = list.length * USB_ROW + 'px';
+      if (resetScroll) listEl.scrollTop = 0;
+      paint(); foot();
+    }
+    const visible = () => { const a = Math.floor(listEl.scrollTop / USB_ROW); return list.slice(a, a + Math.ceil((listEl.clientHeight || 400) / USB_ROW) + 1); };
+    function paint() {
+      if (!on) return;
+      const rowsEl = q1('.usb-rows');
+      if (!DS.us.rows.length) { rowsEl.innerHTML = `<div class="usb-empty">${DS.srv.ok ? '미국 종목 목록을 받는 중… (PC 서버 첫 실행이면 1~2분)' : 'PC 서버가 켜져 있어야 미국 전 종목 목록이 나옵니다.<br>⋯ → 「PC 서버 연결」'}</div>`; return; }
+      if (!list.length) { rowsEl.innerHTML = `<div class="usb-empty">${q ? '찾는 종목이 없습니다' : usbState.tab === 'fav' ? '지금 관심목록에 미국 주식이 없습니다 (☆를 눌러 추가)' : usbState.tab === 'sector' && DS.us.sic && DS.us.sic.running ? `섹터 분류 중… (SEC 업종코드 ${DS.us.sic.done}/${DS.us.sic.total}, 처음 한 번만)` : '없음'}</div>`; return; }
+      const a = Math.max(0, Math.floor(listEl.scrollTop / USB_ROW) - 4), n = Math.ceil((listEl.clientHeight || 400) / USB_ROW) + 8, need = [], html = [];
+      for (let i = a; i < Math.min(list.length, a + n); i++) {
+        const sym = list[i], r = by(sym) || [sym, '', '', '', ''], b = brow(sym), c = chgOf(sym), key = 'YAHOO:' + sym, fav = curList().items.includes(key);
+        if (!sparkMem.has(sym)) need.push(sym);
+        html.push(`<div class="usr${i === act ? ' act' : ''}" data-s="${esc(sym)}" style="top:${i * USB_ROW}px"><div class="nm">${ICON.html(key, 'sm')}<div><div class="t">${esc(sym)}<small>${esc(r[1] || '')}</small></div><div class="e">${esc(r[2] || '')}</div></div></div>`
+          + `<div>${sparkSvg(sparkMem.get(sym), c == null || c >= 0)}</div><div class="x">${esc(r[3] || '')}${r[4] === 'etf' ? ' · ETF' : ''}</div>`
+          + `<div class="r p">${b && b[0] != null ? fpx(b[0]) : '-'}</div><div class="r ${c == null ? '' : c >= 0 ? 'pos' : 'neg'}">${c == null ? '-' : fpc(c)}</div><div class="r">${b && b[2] ? fbig(b[2], 'USD') : '-'}</div>`
+          + `<button class="addst${fav ? ' on' : ''}" data-star="${esc(sym)}" title="관심목록에 추가/빼기">${fav ? '★' : '☆'}</button></div>`);
+      }
+      rowsEl.innerHTML = html.join('');
+      if (need.length && DS.srv.ok) {
+        clearTimeout(sparkT);
+        sparkT = setTimeout(async () => {
+          const ask = need.filter(x => !sparkMem.has(x)).slice(0, 60); if (!ask.length) return;
+          ask.forEach(x => sparkMem.set(x, null));
+          try { const j = await DS.usSpark(ask); for (const [x, v] of Object.entries(j)) sparkMem.set(x, v); paint(); } catch { ask.forEach(x => sparkMem.delete(x)); }
+        }, 350);
+      }
+    }
+    function foot() {
+      if (!on) return;
+      const m = MKT.state(), B = DS.board, sorted = !((usbState.tab === 'theme' || usbState.tab === 'fav') && !q);
+      q1('.mk').innerHTML = `<span class="mkt ${m.ph}" style="padding:0;cursor:default"><i></i>${esc(m.label)} · ${esc(m.next)}</span>`;
+      q1('.info').textContent = `${list.length.toLocaleString()}종목${sorted ? ' · 거래대금순' : ''} · `
+        + (B.mode === 'alpaca' ? '시세 Alpaca 실시간 (거래대금 15분 지연)' : B.mode === 'yahoo' ? '시세 야후 · ⋯ →「미국 주식 전 종목 시세 (Alpaca)」 키를 넣으면 실시간' : DS.srv.ok ? '시세 받는 중…' : 'PC 서버 꺼짐');
+    }
+    async function tickVisible() { if (!on || !DS.srv.ok) return; try { await DS.boardSyms(visible()); paint(); foot(); } catch {} }
+    async function tickAll() { if (!on || !DS.srv.ok) return; const first = !DS.board.v; try { await DS.boardAll(); first ? build(false) : (paint(), foot()); } catch {} }
+    function loop(fn, ms) { let t = 0, live = true; const go = async () => { await fn(); if (on && live) t = setTimeout(go, ms()); }; go(); timers.push(() => { live = false; clearTimeout(t); }); }
+    box.addEventListener('click', e => {
+      const st = e.target.closest('[data-star]'); if (st) { e.stopPropagation(); onStar('YAHOO:' + st.dataset.star); if (usbState.tab === 'fav') build(false); else { paint(); paintTabs(); } return; }
+      const tb = e.target.closest('[data-t]'); if (tb) { usbState.tab = tb.dataset.t; uls.set('mc.usbTab', usbState.tab); build(); tickVisible(); inp.focus(); return; }
+      const c = e.target.closest('[data-c]'); if (c) { usbState.chip[usbState.tab] = c.dataset.c; build(); tickVisible(); inp.focus(); return; }
+      const r = e.target.closest('.usr'); if (r) onPick('YAHOO:' + r.dataset.s);
+    });
+    listEl.addEventListener('scroll', () => { paint(); clearTimeout(scrollT); scrollT = setTimeout(tickVisible, 250); });
+    return {
+      async show() {
+        on = true; box.hidden = false; q = inp.value.trim();
+        timers.forEach(f => f()); timers = [];
+        build();
+        if (!DS.us.rows.length) { if (DS.srv.ok == null) await DS.ping(); if (DS.srv.ok) { await DS.loadUS(); if (on) build(); } }
+        loop(tickAll, () => DS.board.mode === 'alpaca' ? 20000 : 60000);
+        loop(tickVisible, () => DS.board.mode === 'alpaca' && MKT.state().ph !== 'closed' ? 2500 : 15000);
+        loop(async () => foot(), () => 30000);
+      },
+      hide() { on = false; box.hidden = true; timers.forEach(f => f()); timers = []; },
+      filter(v) { q = v.trim(); build(); tickVisible(); },
+      key(e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault(); act = Math.max(0, Math.min(list.length - 1, act + (e.key === 'ArrowDown' ? 1 : -1)));
+          if (act * USB_ROW < listEl.scrollTop) listEl.scrollTop = act * USB_ROW;
+          else if ((act + 1) * USB_ROW > listEl.scrollTop + listEl.clientHeight) listEl.scrollTop = (act + 1) * USB_ROW - listEl.clientHeight;
+          paint();
+        } else if (e.key === 'Enter' && list[act]) { e.preventDefault(); onPick('YAHOO:' + list[act]); }
+      },
+    };
+  }
+
+  // ---------------- 미국 장 상태 (뉴욕 시간 · 휴장일 · 조기폐장) ----------------
+  const MKT = (() => {
+    const HOL = new Set(['2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25', '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+      '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31', '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24']);
+    const EARLY = new Set(['2026-11-27', '2026-12-24', '2027-11-26']);
+    const F = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short' });
+    const isTrade = (ymd, wd) => wd !== 'Sat' && wd !== 'Sun' && !HOL.has(ymd);
+    const dur = x => x >= 1440 ? `${Math.floor(x / 1440)}일 ${Math.floor(x % 1440 / 60)}시간` : (x >= 60 ? `${Math.floor(x / 60)}시간 ` : '') + `${x % 60}분`;
+    function state(at = new Date()) {
+      const p = {}; for (const x of F.formatToParts(at)) p[x.type] = x.value;
+      const day = `${p.year}-${p.month}-${p.day}`, m = (+p.hour % 24) * 60 + +p.minute, trade = isTrade(day, p.weekday);
+      const close = EARLY.has(day) ? 780 : 960, ext = EARLY.has(day) ? 1020 : 1200;
+      if (trade && m >= 240 && m < 570) return { ph: 'pre', label: '프리마켓', next: dur(570 - m) + ' 후 정규장 시작' };
+      if (trade && m >= 570 && m < close) return { ph: 'regular', label: '정규장', next: dur(close - m) + ' 후 마감' + (EARLY.has(day) ? ' (조기폐장)' : '') };
+      if (trade && m >= close && m < ext) return { ph: 'after', label: '애프터마켓', next: dur(ext - m) + ' 후 종료' };
+      let wait = trade && m < 240 ? 240 - m : null;
+      if (wait == null) {
+        const [y, mo, dd] = day.split('-').map(Number);
+        for (let i = 1; i <= 10; i++) {
+          const t = new Date(Date.UTC(y, mo - 1, dd + i)), ymd = t.toISOString().slice(0, 10), wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][t.getUTCDay()];
+          if (isTrade(ymd, wd)) { wait = i * 1440 + 240 - m; break; }
+        }
+      }
+      const label = HOL.has(day) ? '휴장 (미국 공휴일)' : p.weekday === 'Sat' || p.weekday === 'Sun' ? '주말 휴장' : '장 마감';
+      return { ph: 'closed', label, next: dur(wait || 0) + ' 후 프리마켓' };
+    }
+    function paint() { const el = $('mkt'); if (!el) return; const st = state(); el.className = 'mkt ' + st.ph; el.querySelector('span').textContent = `${st.label} · ${st.next}`; }
+    return { state, paint, HOL, EARLY };
+  })();
+
+  // ---------------- 하단 시세 띠 ----------------
+  const TAPE_DEF = ['YAHOO:SPY', 'YAHOO:QQQ', 'YAHOO:DIA', 'YAHOO:NVDA', 'YAHOO:TSLA', 'YAHOO:AAPL', 'BINANCE:BTCUSDT', 'BINANCE:ETHUSDT', 'YAHOO:KRW=X'];
+  let tapeKeys = (() => { try { return JSON.parse(uls.get('mc.tape')) || TAPE_DEF; } catch { return TAPE_DEF; } })();
+  const tapeQ = k => { const q = px[k]; if (q && q.price != null) return q; const alt = k.startsWith('YAHOO:') ? DS.liveAlt(k) : null; return alt ? px[alt.key] || {} : q || {}; };
+  function paintTape() {
+    const el = $('tape'); if (!el) return;
+    el.innerHTML = tapeKeys.map(k => { const q = tapeQ(k), c = q.chgPct; return `<span data-k="${esc(k)}">${esc(DS.label(k))}<b>${fpx(q.price)}</b><em style="font-style:normal" class="${c == null ? '' : c >= 0 ? 'pos' : 'neg'}">${c == null ? '' : fpc(c)}</em></span>`; }).join('');
+  }
+  async function editTape() {
+    const v = await askText('하단 시세 띠 종목', tapeKeys.map(k => DS.label(k)).join(', '), '쉼표로 나눠 적으세요. 예: SPY, QQQ, NVDA, BTC, 삼성전자, USDKRW');
+    if (v == null) return;
+    const keys = [];
+    for (const t of v.split(/[,\n]+/).map(x => x.trim()).filter(Boolean)) { const k = DS.resolveSync(t) || await DS.resolve(t); if (k && !keys.includes(k)) keys.push(k); }
+    tapeKeys = keys.length ? keys : TAPE_DEF; uls.set('mc.tape', JSON.stringify(tapeKeys)); paintTape(); pollYahoo(); toast('하단 시세 띠를 바꿨습니다');
+  }
+
+  // ---------------- 코인 김프 (업비트 원화 ÷ (해외 달러 가격 × 환율)) ----------------
+  const KIMP = { key: null, pct: null, basis: '', t: 0 };
+  const coinOf = k => { const m = /^(?:BINANCE|BINANCESPOT):(?:1000+)?([A-Z0-9]+?)USDT$|^(?:COINBASE|CRYPTO):([A-Z0-9]+)USD$/.exec(k || ''); return m ? (m[1] || m[2]) : null; };
+  async function updKimp(key) {
+    const coin = coinOf(key); if (!coin) { KIMP.key = null; return; }
+    try {
+      const mk = ['KRW-' + coin, 'KRW-USDT'].join(',');
+      const r = await fetch('https://api.upbit.com/v1/ticker?markets=' + mk); if (!r.ok) throw new Error(r.status);
+      const j = await r.json(), krw = (j.find(x => x.market === 'KRW-' + coin) || {}).trade_price, usdt = (j.find(x => x.market === 'KRW-USDT') || {}).trade_price;
+      const fx = px['YAHOO:KRW=X'] && px['YAHOO:KRW=X'].price, usd = (px[key] && px[key].price) || (CH.data && CH.data.N ? CH.data.C[CH.data.N - 1] : null);
+      if (!krw || !usd) { KIMP.key = key; KIMP.pct = null; return; }
+      const rate = fx || usdt;
+      Object.assign(KIMP, { key, pct: (krw / (usd * rate) - 1) * 100, basis: fx ? `환율 ${fpx(fx)}원` : `테더 ${fpx(usdt)}원 기준`, krw, t: Date.now() });
+    } catch { KIMP.key = key; KIMP.pct = null; }
+  }
+
+  // ---------------- 윗줄 추가 정보 · 오른쪽 상세 (미국 주식) ----------------
+  const usSym = k => k && k.startsWith('YAHOO:') && DS.us.by.has(k.slice(6)) ? k.slice(6) : (k && /^YAHOO:[A-Z]{1,5}(-[A-Z]{1,2})?$/.test(k) ? k.slice(6) : null);
+  const fnum = v => v == null ? '-' : v >= 1e9 ? (v / 1e9).toFixed(2) + 'B' : v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(Math.round(v));
+  function topExtra(k) {
+    const sym = usSym(k);
+    if (sym) {
+      const b = DS.board.rows.get(sym), q = px[k] || {};
+      const pc = b && b[1] != null ? b[1] : q.ref ?? q.prev;
+      const parts = [];
+      if (pc != null) parts.push(`전일 종가 <b>${fpx(pc)}</b>`);
+      if (b && b[5] != null && b[6] != null) parts.push(`오늘 범위 <b>${fpx(b[6])} – ${fpx(b[5])}</b>`);
+      if (b && b[3]) parts.push(`거래량 <b>${fnum(b[3])}</b>`);
+      const m = MKT.state(); parts.push(`<span class="mkt ${m.ph}" style="display:inline-flex;padding:0;cursor:default"><i></i>${esc(m.label)}</span>`);
+      return parts.join(' · ');
+    }
+    if (KIMP.key === k && KIMP.pct != null) return `<span title="업비트 원화 가격 ${fpx(KIMP.krw)}원 · ${esc(KIMP.basis)}">김프 <b class="${KIMP.pct >= 0 ? 'pos' : 'neg'}">${fpc(KIMP.pct)}</b></span>`;
+    return '';
+  }
+  // 차트 종목: 미국 주식이면 시세판 15초마다 · 코인이면 김프 15초마다
+  let curInfoT = 0;
+  async function pollCurInfo() {
+    clearTimeout(curInfoT);
+    const k = ST.key, sym = usSym(k);
+    try {
+      if (sym && DS.srv.ok) { await DS.boardSyms([sym]); renderDetail(true); }
+      else if (coinOf(k)) await updKimp(k);
+    } catch {}
+    curInfoT = setTimeout(pollCurInfo, sym && DS.board.mode === 'alpaca' && MKT.state().ph !== 'closed' ? 5000 : 15000);
+  }
+
+  // ---------------- 오르는 색 (국내식 빨강 / 해외식 초록) ----------------
+  const KR_UP = '#f04452', KR_DOWN = '#3182f6';
+  function applyKrColor(toChart) {
+    const kr = uls.get('mc.krColor') === '1', r = document.documentElement.style;
+    if (kr) { r.setProperty('--up', KR_UP); r.setProperty('--down', KR_DOWN); } else { r.removeProperty('--up'); r.removeProperty('--down'); }
+    if (toChart) setCfg(kr ? { up: KR_UP, down: KR_DOWN } : { up: CH.CFG_DEFAULT.up, down: CH.CFG_DEFAULT.down });
+  }
+
+  // ---------------- 미국 주식 전 종목 시세 (Alpaca 키 → PC 서버) ----------------
+  async function alpacaDialog() {
+    let cur = null; try { cur = await DS.api('/api/us/keys'); } catch {}
+    const d = openDlg(`<div class="in"><header>미국 주식 전 종목 시세 (Alpaca)<button class="ib" data-x>✕</button></header><div class="body">
+      <div>웨돔 종목 찾기 창처럼 <b>미국 전 종목</b>의 가격·변동·거래대금을 실시간으로 보여 줍니다. 키가 없으면 야후 시세(15초~30분)로 보입니다.</div>
+      <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li><a href="https://app.alpaca.markets/signup" target="_blank" rel="noopener">Alpaca 무료 가입</a> → <b>Paper Trading</b>(모의투자) 계정 → 오른쪽 「API Keys」 → Generate</li>
+        <li>나온 <b>Key</b>와 <b>Secret</b>을 아래에 붙여 넣고 「저장 · 확인」</li></ol>
+      <div class="grid2"><input id="apK" placeholder="${cur && cur.alpaca ? '저장된 키 있음 (바꾸려면 새로 입력)' : 'API Key ID'}" autocomplete="off" spellcheck="false"><input id="apS" type="password" placeholder="Secret Key" autocomplete="off"></div>
+      <div class="dim" style="font-size:11.5px">키는 내 PC 서버 폴더의 data/us_keys.json 에만 저장됩니다 (홈페이지·백업 파일에 안 들어감). 실시간 가격은 IEX 거래소 체결이고, 전일 종가·거래대금은 전체 거래소 15분 지연입니다. 무료 플랜은 개인 용도입니다.</div>
+      <div id="apRes" class="dim">${!DS.srv.ok ? '<span class="neg">PC 서버가 꺼져 있습니다. 먼저 PC 서버를 켜세요.</span>' : cur ? (cur.alpaca ? `지금: Alpaca 실시간${cur.stat && cur.stat.err ? ' · <span class="neg">' + esc(cur.stat.err) + '</span>' : ''}` : '지금: 야후 시세') : '<span class="neg">PC 서버가 옛 버전입니다 (새 버전으로 바꾸면 쓸 수 있음)</span>'}</div></div>
+      <footer>${cur && cur.alpaca ? '<button class="btn left" id="apOff">키 지우기</button>' : ''}<button class="btn" data-x>닫기</button><button class="btn primary" id="apSave">저장 · 확인</button></footer></div>`);
+    const res = d.querySelector('#apRes');
+    d.querySelector('#apSave').onclick = async () => {
+      const k = d.querySelector('#apK').value.trim(), sct = d.querySelector('#apS').value.trim();
+      if (!k || !sct) { res.textContent = 'Key와 Secret을 모두 넣으세요'; return; }
+      res.textContent = '확인 중…';
+      try { const r = await DS.post('/api/us/keys', { key: k, secret: sct }); res.innerHTML = r.ok ? `<span class="pos">✓ ${esc(r.msg)}</span>` : `<span class="neg">✗ ${esc(r.msg)}</span>`; if (r.ok) { d.querySelector('#apK').value = ''; d.querySelector('#apS').value = ''; toast('Alpaca 연결 · 미국 전 종목 실시간'); } }
+      catch (e) { res.innerHTML = `<span class="neg">${esc(e.message)}</span>`; }
+    };
+    const off = d.querySelector('#apOff'); if (off) off.onclick = async () => { try { await DS.post('/api/us/keys', { key: '', secret: '' }); } catch {} d.close(); toast('Alpaca 키를 지웠습니다 (야후 시세로)'); };
   }
 
   // ---------------- 관심목록 ----------------
@@ -4418,7 +4729,14 @@ const UI = (() => {
   function paintPrices() {
     for (const row of $('list').querySelectorAll('.row[data-key]')) {
       const k = row.dataset.pk || row.dataset.key, q = px[k]; if (!q) continue;
-      if (ST.sideTab !== 'scan') { row.querySelector('.p').textContent = fpx(q.price); row.querySelector('.c').innerHTML = chgHtml(k); }
+      if (ST.sideTab !== 'scan') {
+        const pe = row.querySelector('.p'), old = pe.textContent, nv = fpx(q.price);
+        if (old !== nv && old && old !== '-' && nv !== '-') {   // 값이 바뀌면 잠깐 깜빡임 (오르면 상승색, 내리면 하락색)
+          const a = parseFloat(old.replace(/,/g, '')), b = parseFloat(nv.replace(/,/g, ''));
+          row.classList.remove('fl-up', 'fl-dn'); void row.offsetWidth; row.classList.add(b >= a ? 'fl-up' : 'fl-dn');
+        }
+        pe.textContent = nv; row.querySelector('.c').innerHTML = chgHtml(k);
+      }
     }
   }
   // ---------------- 관심목록: 여러 개 선택 · 복사 · 붙여넣기 · 다른 목록으로 · 즐겨찾기 ----------------
@@ -4700,7 +5018,7 @@ const UI = (() => {
   let pollT = null;
   async function pollYahoo() {
     clearTimeout(pollT);
-    const keys = [...new Set([...sideItems(), ST.key].filter(k => k && k.startsWith('YAHOO:')))].slice(0, 200);
+    const keys = [...new Set([...sideItems(), ST.key, ...tapeKeys].filter(k => k && k.startsWith('YAHOO:')))].slice(0, 200);
     if (keys.length && DS.srv.ok) {
       try {
         const fresh = await DS.yahooQuotes(keys), today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
@@ -4723,7 +5041,7 @@ const UI = (() => {
   const usPaint = () => { if (usPaintT) return; usPaintT = setTimeout(() => { usPaintT = 0; paintPrices(); renderDetail(); }, 400); };
   function syncUS() {
     const want = new Map();
-    if (USRT.on()) for (const k of [ST.key, ...sideItems()]) { const s = USRT.symOf(k); if (s && !want.has(k) && want.size < USRT.MAX) want.set(k, s); }
+    if (USRT.on()) for (const k of [ST.key, ...sideItems(), ...tapeKeys]) { const s = USRT.symOf(k); if (s && !want.has(k) && want.size < USRT.MAX) want.set(k, s); }
     for (const [k, off] of usSubs) if (!want.has(k)) { off(); usSubs.delete(k); }
     for (const [k, sym] of want) if (!usSubs.has(k)) usSubs.set(k, USRT.sub(sym, p => {
       const o = px[k] || {}, prev = o.ref ?? o.prev ?? null;
@@ -4790,6 +5108,13 @@ const UI = (() => {
       if (s.zoneBelow) rows.push(['아래 겹침 구간', `${s.zoneBelow.n}겹 ${fpx(s.zoneBelow.lo)}~${fpx(s.zoneBelow.hi)}`]);
       if (s.zoneAbove) rows.push(['위 겹침 구간', `${s.zoneAbove.n}겹 ${fpx(s.zoneAbove.lo)}~${fpx(s.zoneAbove.hi)}`]);
     }
+    const usS = usSym(k), ub = usS && DS.board.rows.get(usS);
+    if (ub) {
+      if (ub[1] != null) rows.push(['전일 종가', fpx(ub[1])]);
+      if (ub[5] != null && ub[6] != null) rows.push(['오늘 범위', `${fpx(ub[6])} – ${fpx(ub[5])}`]);
+      if (ub[3]) rows.push(['거래량 · 거래대금', `${fnum(ub[3])} · ${fbig(ub[2], 'USD')}`]);
+    }
+    if (usS) { const ms = MKT.state(); rows.push(['장 상태', `${ms.label} · ${ms.next}`]); }
     if (m.currency) rows.push(['통화', m.currency]);
     const tvUrl = 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(tvSymbol(k));
     $('detail').innerHTML = `<h3>${esc(DS.label(k))}<small>${esc(DS.nameOf(k))} · ${esc(m.exchangeName || DS.sourceLabel(k))}</small></h3>
@@ -4826,7 +5151,7 @@ const UI = (() => {
       const alt = DS.liveAlt(key);
       if (alt) { toast(`${DS.label(key)} → ${DS.label(alt.key)} 바이낸스 실시간으로 열었습니다${ALT_NOTE[alt.kind] ? ' (' + ALT_NOTE[alt.kind] + ')' : ''}`, 4000); key = alt.key; }
     }
-    ST.key = key; if (tab) ST.sideTab = tab; save();
+    ST.key = key; if (tab) ST.sideTab = tab; save(); setTimeout(pollCurInfo, 300);
     setView(ST.view === 'tv' ? 'tv' : 'chart');
     $('symLbl').textContent = DS.label(key); $('symIco').innerHTML = ICON.html(key, 'sm'); paintStar();
     document.title = `${DS.label(key)} · 나만의 차트`;
@@ -5503,6 +5828,10 @@ const UI = (() => {
       ['백업 불러오기', importBackup],
       '-',
       [`미국 주식 실시간 (Finnhub)${USRT.on() ? ' · ' + ({ on: '연결됨', connecting: '연결 중', error: '오류', idle: '대기' }[USRT.status] || '') : ''}`, finnhubDialog],
+      ['미국 주식 전 종목 시세 (Alpaca)' + (DS.board.mode === 'alpaca' ? ' · 실시간' : ''), alpacaDialog],
+      ['미국 주식 탐색 (테마·섹터·ETF)', () => openSearch({ filter: 'usb' })],
+      [(uls.get('mc.krColor') === '1' ? '✓ ' : '') + '오르는 색 빨강 · 내리는 색 파랑 (국내식)', () => { uls.set('mc.krColor', uls.get('mc.krColor') === '1' ? '0' : '1'); applyKrColor(true); paintTape(); renderList(); toast(uls.get('mc.krColor') === '1' ? '국내식 색 (오르면 빨강)' : '해외식 색 (오르면 초록)'); }],
+      ['하단 시세 띠 종목', editTape],
       DS.HOSTED ? ['PC 서버 연결 (주식·선물)', serverDialog]
         : ['PC 서버 다시 확인', async () => { await DS.ping(); paintSrv(); toast(DS.srv.ok ? 'PC 서버 연결됨' : 'PC 서버가 꺼져 있습니다'); }],
       ['단축키 보기', () => openDlg(`<div class="in"><header>단축키<button class="ib" data-x>✕</button></header><div class="body"><dl style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0">
@@ -5588,6 +5917,9 @@ const UI = (() => {
     CH.init($('chart'), $('legend'), { layout: ST.layouts[ST.layoutId] || (ST.layoutId === 'full' ? null : ST.layout), fibTemplate: ST.fibTemplate, log: ST.log, magnet: ST.magnet, cfg: ST.chartCfg, onChange: onChartChange,
       saveLayout: l => { ST.layout = l; ST.layouts[ST.layoutId] = l; save(); }, scanInfo: k => scanIdx[k] || null });
     bindFav(); bindRanges(); renderFav(); paintScale(); bindSelBar(); bindTvLinks(); bindDetailGrip();
+    applyKrColor(false); CH.setTopExtra(topExtra);
+    MKT.paint(); setInterval(MKT.paint, 30000); $('mkt').onclick = () => openSearch({ filter: 'usb' });
+    paintTape(); setInterval(paintTape, 1500); $('tape').onclick = e => { const t = e.target.closest('[data-k]'); if (t) openChart(t.dataset.k); };
     watchServer();
     DS.loadCoinbase().catch(() => {});
     try { await DS.loadBinance(); }
@@ -5608,7 +5940,7 @@ const UI = (() => {
     openChart(ST.key);
     if (ST.view !== 'chart') setView(ST.view);
     bindSplit();
-    pollYahoo(); pollOther();
+    pollYahoo(); pollOther(); pollCurInfo();
     if (typeof SCAN !== 'undefined') SCAN.init();
     if (typeof DISC !== 'undefined') DISC.init();
   }
@@ -5616,7 +5948,7 @@ const UI = (() => {
     document.body.insertAdjacentHTML('beforeend', '<div class="chartMsg" style="position:fixed"><div><b>차트 엔진을 불러오지 못했습니다</b>인터넷 연결을 확인하세요. 회사·학교망에서는 cdn.jsdelivr.net, unpkg.com 접속이 막혀 있을 수 있습니다.</div></div>');
   }
 
-  return { boot, libFailed, toast, openChart, useLayout, openSearch, indicatorDialog, drawingDialog, chartContext, legendContext, showMenuAt, renderTv, TOOL_DEF, TOOL_GROUPS, setScanResults, setDiscResults, newListFrom, curList, setView,
+  return { MKT, alpacaDialog, boot, libFailed, toast, openChart, useLayout, openSearch, indicatorDialog, drawingDialog, chartContext, legendContext, showMenuAt, renderTv, TOOL_DEF, TOOL_GROUPS, setScanResults, setDiscResults, newListFrom, curList, setView,
     confirmBox, download, fpx, fpc, fbig, esc, px, ST, save, tvSymbol, get scan() { return scan; }, get disc() { return disc; } };
 })();
 

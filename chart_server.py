@@ -33,13 +33,14 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from us_universe import UNI
+from us_market import Board
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 log = logging.getLogger("mychart")
 
 SYM_RE = re.compile(r"^[A-Za-z0-9.\-=^_&]{1,24}$")
 DAY_MS = 86_400_000
-SERVER_VERSION = "2026-11-25a"  # 미국 전 종목 목록(한글명·섹터·ETF·테마), 시세에 날짜
+SERVER_VERSION = "2026-11-26a"  # 미국 시세판(전 종목 가격·거래대금, Alpaca 실시간 선택), 미니 차트
 
 # tf: (야후 interval, 전체 기간, 최근 기간, 합치기(kind, n))
 TF = {
@@ -513,6 +514,24 @@ def cg_trending():
     return cache.get(("cgt",), 600, lambda: http_json("https://api.coingecko.com/api/v3/search/trending"))
 
 
+BOARD = Board(UNI, quotes, download, frame_for, df_rows)
+
+
+# 키 저장(POST)은 내 홈페이지·이 PC에서 연 화면에서만
+# 설정을 바꾸는 요청(POST)은 내 홈페이지·이 PC 화면에서 온 것만 받음 (다른 사이트가 몰래 키를 바꾸지 못하게)
+OWN_HOSTS = {"localhost", "127.0.0.1", "slagood2-lang.github.io"} | {h.strip() for h in os.environ.get("MYCHART_ORIGINS", "").split(",") if h.strip()}
+
+
+def origin_ok(origin):
+    if not origin:
+        return True          # 브라우저가 아닌 요청 (이 PC의 프로그램·명령줄)
+    try:
+        h = urllib.parse.urlparse(origin).hostname or ""
+    except ValueError:
+        return False
+    return h in OWN_HOSTS
+
+
 # ---------------- HTTP ----------------
 def symbols_param(qs, key="symbols", limit=250):
     raw = (qs.get(key) or [""])[0]
@@ -544,9 +563,24 @@ class Handler(BaseHTTPRequestHandler):
         # 홈페이지(https)에서 내 PC 서버로 오는 요청 허용 (예전 크롬의 Private Network Access 사전 확인 포함)
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
+
+    def do_POST(self):
+        p = urllib.parse.urlparse(self.path).path
+        try:
+            if not origin_ok(self.headers.get("Origin")):
+                return self.send(403, {"error": "이 사이트에서는 바꿀 수 없습니다"})
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(min(n, 10000)) or b"{}")
+            if p == "/api/us/keys":
+                return self.send(200, BOARD.set_keys(body.get("key", ""), body.get("secret", "")))
+            return self.send(404, {"error": "unknown api"})
+        except Exception as e:
+            log.warning("POST %s: %s", p, e)
+            return self.send(500, {"error": str(e)})
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
@@ -604,6 +638,13 @@ class Handler(BaseHTTPRequestHandler):
                                              num(arg("minCap")) or 0))
             if p == "/api/yf/trending":
                 return self.send(200, trending(arg("region", "US")))
+            if p == "/api/us/board":
+                syms = symbols_param(qs, limit=300) if arg("symbols") else None
+                return self.send(200, BOARD.payload(int(arg("since", "0") or 0), syms))
+            if p == "/api/us/spark":
+                return self.send(200, BOARD.spark(symbols_param(qs, limit=80)))
+            if p == "/api/us/keys":
+                return self.send(200, {"alpaca": BOARD.keys.ok, "mode": BOARD.mode(), "stat": BOARD.stat})
             if p == "/api/us/universe":
                 return self.send(200, UNI.payload())
             if p == "/api/us/group":
@@ -687,6 +728,7 @@ def main(argv=None):
     print(f"나만의 차트: {url}  (끄려면 Ctrl+C)")
     if not o.no_us_universe:
         UNI.start()   # 미국 전 종목·한글명·섹터 (백그라운드, 하루 1회)
+        BOARD.start()  # 미국 시세판 (전 종목 가격·거래대금)
     if not o.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
