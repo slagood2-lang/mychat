@@ -1975,7 +1975,7 @@ const DS = (() => {
     ? (srv.enabled ? '내 PC 서버에 연결하지 못했습니다. PC에서 start_chart.bat을 켜 두고, 크롬이 이 기기·로컬 네트워크 접근을 물으면 허용하세요.'
                    : '주식·선물·지수는 PC 서버가 필요합니다. PC에서 start_chart.bat을 켠 뒤 상단 ⋯ → 「PC 서버 연결」을 누르세요. (휴대폰에서는 코인만 볼 수 있습니다)')
     : '내 PC 서버가 꺼져 있습니다. start_chart.bat(맥: start_chart.command)을 실행한 뒤 다시 시도하세요.';
-  const NEED_SERVER = '2026-11-24b'; // 이보다 옛 PC 서버는 미국 주식 마지막 거래일이 빠질 수 있음
+  const NEED_SERVER = '2026-11-26a'; // 이보다 옛 PC 서버는 미국 종목 찾기 창·전 종목 시세판·한글 검색이 비어 보임
   async function ping() {
     if (!srv.enabled) { srv.ok = false; return srv; }
     try {
@@ -2387,7 +2387,7 @@ const DS = (() => {
   const cgTrending = () => cg('/api/cg/trending', 'https://api.coingecko.com/api/v3/search/trending');
 
   function reconnect() { for (const f of wakeSubs) try { f(); } catch {} }
-  return { TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
+  return { NEED_SERVER, TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
     resolveSync, resolve, search, localSearch, klines, cachedKlines, recent, streamKline, streamTickers, binanceTickers, yahooQuotes,
     cgMarkets, cgTrending, KR_NAMES, us, loadUS, usSearch, board, boardAll, boardSyms, usSpark, post };
 })();
@@ -4491,7 +4491,7 @@ const UI = (() => {
     function paint() {
       if (!on) return;
       const rowsEl = q1('.usb-rows');
-      if (!DS.us.rows.length) { rowsEl.innerHTML = `<div class="usb-empty">${DS.srv.ok ? '미국 종목 목록을 받는 중… (PC 서버 첫 실행이면 1~2분)' : 'PC 서버가 켜져 있어야 미국 전 종목 목록이 나옵니다.<br>⋯ → 「PC 서버 연결」'}</div>`; return; }
+      if (!DS.us.rows.length) { rowsEl.innerHTML = `<div class="usb-empty">${DS.srv.ok && DS.srv.old ? `PC 서버가 옛 버전(${esc(DS.srv.version || '?')})이라 이 창이 비어 있습니다.<br>저장소 main의 새 파일(chart_server.py · us_universe.py · us_market.py)로 PC 서버 폴더를 덮어쓰고 start_chart.bat을 다시 켜세요 (필요: ${DS.NEED_SERVER}).` : DS.srv.ok ? '미국 종목 목록을 받는 중… (PC 서버 첫 실행이면 1~2분)' : 'PC 서버가 켜져 있어야 미국 전 종목 목록이 나옵니다.<br>⋯ → 「PC 서버 연결」'}</div>`; return; }
       if (!list.length) { rowsEl.innerHTML = `<div class="usb-empty">${q ? '찾는 종목이 없습니다' : usbState.tab === 'fav' ? '지금 관심목록에 미국 주식이 없습니다 (☆를 눌러 추가)' : usbState.tab === 'sector' && DS.us.sic && DS.us.sic.running ? `섹터 분류 중… (SEC 업종코드 ${DS.us.sic.done}/${DS.us.sic.total}, 처음 한 번만)` : '없음'}</div>`; return; }
       const a = Math.max(0, Math.floor(listEl.scrollTop / USB_ROW) - 4), n = Math.ceil((listEl.clientHeight || 400) / USB_ROW) + 8, need = [], html = [];
       for (let i = a; i < Math.min(list.length, a + n); i++) {
@@ -5380,7 +5380,7 @@ const UI = (() => {
   }
   let oldWarned = false;
   { let shown = ''; USRT.onStatus(st => { if (st === 'error' && USRT.err && USRT.err !== shown) { shown = USRT.err; toast('Finnhub: ' + USRT.err + ' (⋯ → 미국 주식 실시간)', 6000); } }); }
-  async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && !DS.us.rows.length) DS.loadUS(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast('PC 프로그램이 옛 버전입니다 → 새 「나만의차트-PC프로그램」의 설치하기.bat을 한 번 실행하세요 (미국 주식 시세가 하루 늦게 보일 수 있음)', 12000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
+  async function watchServer() { await DS.ping(); paintSrv(); if (DS.srv.ok && !DS.us.rows.length) DS.loadUS(); if (DS.srv.ok && DS.srv.old && !oldWarned) { oldWarned = true; toast(`PC 서버가 옛 버전(${DS.srv.version || '?'})입니다 → 새 파일(chart_server.py · us_universe.py · us_market.py)로 덮어쓰고 start_chart.bat을 다시 켜세요. 그 전에는 미국 종목 찾기 창·전 종목 시세·한글 검색이 비어 보입니다`, 15000); } setTimeout(watchServer, DS.srv.ok ? 60000 : 15000); }
   function applyTheme() {
     if (ST.theme === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', ST.theme);
   }
