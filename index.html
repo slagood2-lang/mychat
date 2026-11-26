@@ -440,6 +440,25 @@ body.pane .top .tb,body.pane .top .sym-btn{font-size:12px}
 .ob-tr span:first-child{color:var(--muted)}
 .ob-tr.big{background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:700}
 .ob .pos{color:var(--up)}.ob .neg{color:var(--down)}
+/* 차트 라이브러리 안쪽 z-index(패널 경계 50 등)가 바깥 메뉴(40)를 덮지 않게 */
+.chartArea{isolation:isolate}
+/* ---------- 봉 간격 메뉴 ---------- */
+.tfs .tb.tmp{opacity:.8;text-decoration:underline dotted;text-underline-offset:3px}
+.tfs .tf-more{padding:6px 6px;color:var(--muted)}
+.menu.tfm{position:fixed;min-width:210px;overflow:auto;padding:4px 0}
+.menu.tfm .tfm-add{display:block;width:calc(100% - 8px);margin:0 4px 4px;padding:8px 10px;font-size:13px;border-bottom:1px solid var(--line);border-radius:5px 5px 0 0}
+.tfm-h{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:8px 12px 4px;cursor:pointer;letter-spacing:.04em;user-select:none}
+.tfm-h:hover{color:var(--fg)}
+.tfm-i{display:flex;align-items:center;gap:4px;padding:0 4px 0 12px;height:30px;cursor:pointer;font-size:13px;border-radius:5px;margin:0 4px}
+.tfm-i>span{flex:1}
+.tfm-i:hover{background:var(--chip)}
+.tfm-i.on{background:var(--accent);color:#fff}
+.menu .tfm-i .tfm-s,.menu .tfm-i .tfm-x{border:0;background:transparent;padding:2px 6px;font-size:14px;line-height:1;color:var(--muted);opacity:0;border-radius:4px}
+.menu .tfm-i .tfm-x{font-size:11px}
+.menu .tfm-i:hover .tfm-s,.menu .tfm-i:hover .tfm-x,.menu .tfm-i .tfm-s.on{opacity:1}
+.menu .tfm-i .tfm-s.on{color:#f0b429}
+.menu .tfm-i.on .tfm-s,.menu .tfm-i.on .tfm-x{color:#fff}
+.menu .tfm-i .tfm-s:hover,.menu .tfm-i .tfm-x:hover{background:color-mix(in srgb,var(--fg) 12%,transparent)}
 </style>
 </head>
 <body data-view="chart">
@@ -1869,6 +1888,66 @@ const DS = (() => {
   const TF_SEC = { '1m': 60, '3m': 180, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '2h': 7200, '3h': 10800, '4h': 14400, '6h': 21600,
     '12h': 43200, '1d': 86400, '3d': 259200, '1w': 604800, '1M': 2629800, '1y': 31557600 };
   const INTRADAY = tf => TF_SEC[tf] < 86400;
+  // ---------------- 사용자 봉 간격 (10분 · 45분 · 8시간 · 2일 · 3주 · 2달 …) ----------------
+  // 거래소에 없는 간격은 가장 가까운 기본 봉을 받아 묶음 (예: 45분 = 15분 × 3, 8시간 = 4시간 × 2)
+  const NATIVE = new Set(TFS.map(x => x[0]));
+  const UNIT_SEC = { m: 60, h: 3600, d: 86400, w: 604800, M: 2629800 };
+  const UNIT_MAX = { m: 1439, h: 24, d: 365, w: 52, M: 12 };
+  const tfParse = tf => { const m = /^(\d{1,4})(m|h|d|w|M)$/.exec(tf || ''); return m && +m[1] > 0 ? { n: +m[1], u: m[2] } : null; };
+  // 같은 간격은 한 가지 이름으로 (120분 → 2h, 24시간 → 1d, 12달 → 1y)
+  function tfNorm(n, u) {
+    n = Math.floor(+n); if (!(n > 0) || !UNIT_SEC[u]) return null;
+    if (u === 'm' && n % 60 === 0) { n /= 60; u = 'h'; }
+    if (u === 'h' && n === 24) { n = 1; u = 'd'; }
+    if (u === 'M' && n === 12) return '1y';
+    if (n > UNIT_MAX[u]) return null;
+    return n + u;
+  }
+  const BASE_OF = { m: [30, 15, 5, 3, 1], h: [12, 6, 4, 2, 1] };
+  function derivedOf(tf) {
+    if (NATIVE.has(tf)) return null;
+    const p = tfParse(tf); if (!p) return null;
+    if (p.u === 'm' || p.u === 'h') { const b = BASE_OF[p.u].find(x => p.n % x === 0); return { base: b + p.u, n: p.n / b, u: p.u }; }
+    return { base: '1' + p.u, n: p.n, u: p.u };
+  }
+  const TF_LONG = { '1m': '1분', '1h': '1시간', '2h': '2시간', '3h': '3시간', '4h': '4시간', '6h': '6시간', '12h': '12시간', '1d': '1일', '3d': '3일', '1w': '1주', '1M': '1달', '1y': '12달 (1년)' };
+  const tfLong = tf => TF_LONG[tf] || (p => p ? p.n + { m: '분', h: '시간', d: '일', w: '주', M: '달' }[p.u] : tf)(tfParse(tf));
+  // 처음 보는 간격을 등록 (TF_SEC · TF_NAME를 쓰는 곳이 그대로 동작하게)
+  function tfAdd(tf) {
+    if (TF_SEC[tf]) return true;
+    const p = tfParse(tf); if (!p || !derivedOf(tf)) return false;
+    TF_SEC[tf] = p.n * UNIT_SEC[p.u];
+    TF_NAME[tf] = p.n + { m: '분', h: '시', d: '날', w: '주', M: '달' }[p.u];
+    return true;
+  }
+  for (const tf of ['10m', '8h', '3w']) tfAdd(tf);   // 기본 메뉴에 있는 묶음 간격
+  // 기본 봉 → 사용자 간격 봉. clock = 시계 기준(코인: UTC 하루 시작부터), 아니면 그날 첫 봉 기준(주식)
+  // 맨 앞 묶음은 잘려 있을 수 있어 버림 (서버 regroup과 같은 방식)
+  const DAY_MS = 86400000;
+  function groupBars(k, tf, clock) {
+    const p = tfParse(tf), step = (TF_SEC[tf] || 0) * 1000, out = [];
+    if (!p || !k || !k.length) return k || [];
+    let dayA = null, anchor = 0;
+    for (const x of k) {
+      const t = +x[0]; let key, ot = null, ct = null;
+      if (p.u === 'm' || p.u === 'h') {
+        const day = Math.floor(t / DAY_MS) * DAY_MS;
+        if (clock) { ot = day + Math.floor((t - day) / step) * step; ct = Math.min(ot + step, day + DAY_MS) - 1; }
+        else { if (day !== dayA) { dayA = day; anchor = t; } ot = anchor + Math.floor((t - anchor) / step) * step; ct = ot + step - 1; }
+        key = ot;
+      } else {
+        const di = Math.floor((t + DAY_MS / 2) / DAY_MS);   // 한국 주식 일봉(전날 15:00 UTC)도 제 날짜로
+        if (p.u === 'd') key = Math.floor(di / p.n);
+        else if (p.u === 'w') key = Math.floor(Math.floor((di + 3) / 7) / p.n);   // 월요일 시작 주
+        else { const d = new Date(di * DAY_MS); key = Math.floor((d.getUTCFullYear() * 12 + d.getUTCMonth()) / p.n); }
+      }
+      const c = out[out.length - 1];
+      if (!c || c.k !== key) out.push({ k: key, b: [ot ?? t, +x[1], +x[2], +x[3], +x[4], +x[5], ct ?? +x[6], +x[7] || 0] });
+      else { const b = c.b; if (+x[2] > b[2]) b[2] = +x[2]; if (+x[3] < b[3]) b[3] = +x[3]; b[4] = +x[4]; b[5] += +x[5]; b[7] += +x[7] || 0; if (ct == null) b[6] = +x[6]; }
+    }
+    const r = out.map(o => o.b);
+    return r.length > 1 ? r.slice(1) : r;
+  }
 
   // ---------------- 이름 ----------------
   const KR_NAMES = { '005930': '삼성전자', '000660': 'SK하이닉스', '373220': 'LG에너지솔루션', '207940': '삼성바이오로직스', '005380': '현대차',
@@ -2204,6 +2283,11 @@ const DS = (() => {
   async function klines(key, tf, { need = 1000, endTime, long = false } = {}) {
     const { src, id } = parseKey(key);
     if (tf === '1y') return IND.toYearly(await klines(key, '1M', { need: 400, long }));
+    const dv = derivedOf(tf);
+    if (dv) {   // 사용자 간격: 기본 봉을 받아 묶음 (기본 봉은 최대 3만 개)
+      const nd = Math.min(need, Math.max(50, Math.floor(30000 / dv.n)));
+      return groupBars(await klines(key, dv.base, { need: nd * dv.n + dv.n * 2, endTime, long }), tf, src !== 'yahoo');
+    }
     if (src === 'binance') {
       if (tf === '3h') return group3h(await klines(key, '1h', { need: need * 3 + 3, endTime, long }));
       return FibScan.fetchKlines(id, tf, need, endTime);   // 바이낸스 선물 데이터만
@@ -2231,6 +2315,13 @@ const DS = (() => {
   }
   async function recent(key, tf) {
     const { src, id } = parseKey(key);
+    const dv = derivedOf(tf);
+    if (dv) {   // 지금 묶음 + 바로 앞 묶음
+      let k;
+      if (src === 'yahoo') { k = (await api('/api/yf/klines', { symbol: id, tf: dv.base, recent: 1 })).bars; if (k.length < dv.n * 2 + 1) k = await klines(key, dv.base); }
+      else k = await klines(key, dv.base, { need: dv.n * 2 + 2 });
+      return groupBars(k, tf, src !== 'yahoo').slice(-2);
+    }
     if (src === 'binance') return tf === '3h' ? group3h(await FibScan.fetchKlines(id, '1h', 6)) : FibScan.fetchKlines(id, tf, 3);
     if (src === 'spot') return klines(key, tf, { need: 3 });
     if (src === 'crypto' || src === 'coinbase') return klines(key, tf, { need: 3 });
@@ -2271,6 +2362,20 @@ const DS = (() => {
     if ((src === 'binance' || src === 'spot') && tf !== '1y') {
       const WSB = src === 'spot' ? 'wss://stream.binance.com:9443' : WS;
       const is3h = tf === '3h', hours = new Map();
+      const dv = derivedOf(tf), baseBars = new Map();   // 사용자 간격: 기본 봉 웹소켓을 받아 묶음
+      let seeded = false, seedT = 0;
+      const emitDv = () => {
+        if (!seeded) return;   // 앞 봉을 받기 전엔 지금 묶음의 시가·고가·저가를 알 수 없음
+        const arr = [...baseBars.values()].sort((a, b) => a[0] - b[0]);
+        while (arr.length > dv.n * 3 + 3) baseBars.delete(arr.shift()[0]);
+        const g = groupBars(arr, tf, true); if (g.length) onBars(g.slice(-2));
+      };
+      const seed = () => klines(key, dv.base, { need: dv.n * 2 + 2 }).then(k => {
+        if (stopped) return;
+        for (const x of k) if (!baseBars.has(+x[0])) baseBars.set(+x[0], [+x[0], +x[1], +x[2], +x[3], +x[4], +x[5], +x[6], +x[7]]);
+        seeded = true; emitDv();
+      }).catch(() => { if (!stopped) seedT = setTimeout(seed, 5000); });
+      if (dv) seed();
       if (is3h) (src === 'spot' ? LONG.spot(id, '1h', Date.now(), 3) : FibScan.fetchKlines(id, '1h', 3)).then(k => { for (const x of k) hours.set(x[0], [x[0], +x[1], +x[2], +x[3], +x[4], +x[5], x[6], +x[7]]); }).catch(() => {});
       let lastMsg = Date.now(), opened = 0, catching = false;
       // 끊겼다 붙으면 그 사이 봉을 다시 받아 빈칸을 메움
@@ -2281,12 +2386,13 @@ const DS = (() => {
       };
       const open = () => {
         if (stopped) return;
-        ws = new WebSocket(`${WSB}/ws/${id.toLowerCase()}@kline_${is3h ? '1h' : tf}`);
+        ws = new WebSocket(`${WSB}/ws/${id.toLowerCase()}@kline_${dv ? dv.base : is3h ? '1h' : tf}`);
         ws.onopen = () => { lastMsg = Date.now(); if (opened++) catchUp(); };
         ws.onmessage = e => {
           const k = JSON.parse(e.data).k; if (!k) return;
           retry = 0; lastMsg = Date.now();
           const bar = [k.t, +k.o, +k.h, +k.l, +k.c, +k.v, k.T, +k.q];
+          if (dv) { baseBars.set(k.t, bar); return emitDv(); }
           if (!is3h) return onBars([bar]);
           hours.set(k.t, bar);
           const g = Math.floor(k.t / H3) * H3;
@@ -2301,7 +2407,7 @@ const DS = (() => {
       const dog = setInterval(() => { if (!stopped && !document.hidden && Date.now() - lastMsg > 90000) { lastMsg = Date.now(); try { ws.close(); } catch {} } }, 15000);
       const wake = () => { if (ws && ws.readyState === 1) catchUp(); else { clearTimeout(timer); retry = 0; try { ws && ws.close(); } catch {} if (!ws || ws.readyState === 3) open(); } };
       wakeSubs.add(wake);
-      return { kind: '실시간', stop() { stopped = true; clearTimeout(timer); clearInterval(dog); wakeSubs.delete(wake); try { ws && ws.close(); } catch {} } };
+      return { kind: '실시간', stop() { stopped = true; clearTimeout(timer); clearTimeout(seedT); clearInterval(dog); wakeSubs.delete(wake); try { ws && ws.close(); } catch {} } };
     }
     const usSym = src === 'yahoo' && tf !== '1y' && USRT.on() ? USRT.symOf(key) : null;   // 미국 주식 + Finnhub 키
     const ticks = ((src === 'coinbase' || src === 'crypto') && tf !== '1y') || !!usSym;
@@ -2309,7 +2415,7 @@ const DS = (() => {
     // 체결로 지금 봉을 바로 고침. 봉 자체(시가·거래량·새 봉)는 주기적으로 받은 것이 기준
     let cur = null, stopTicks = null, pend = null, flushT = 0;
     // 야후 1시간·일봉은 시작 시각이 정시가 아니라(9:30 등) 새 봉은 체결로 만들지 않고 다음 봉 받기를 기다림
-    const step = (TF_SEC[tf] || 0) * 1000, fixed = step && !['3d', '1w', '1M'].includes(tf) && !(usSym && step > 1800000);
+    const step = (TF_SEC[tf] || 0) * 1000, fixed = step && !['3d', '1w', '1M'].includes(tf) && !derivedOf(tf) && !(usSym && step > 1800000);
     const flush = () => { flushT = 0; if (!stopped && pend) { const b = pend; pend = null; onBars([b.slice()]); } };
     const onTick = (p, t, q) => {
       if (stopped || !cur) return;
@@ -2387,7 +2493,7 @@ const DS = (() => {
   const cgTrending = () => cg('/api/cg/trending', 'https://api.coingecko.com/api/v3/search/trending');
 
   function reconnect() { for (const f of wakeSubs) try { f(); } catch {} }
-  return { NEED_SERVER, TFS, TF_NAME, TF_SEC, INTRADAY, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
+  return { NEED_SERVER, TFS, TF_NAME, TF_SEC, INTRADAY, tfParse, tfNorm, tfAdd, tfLong, derivedOf, groupBars, UNIT_MAX, SERVER, HOSTED, srv, ping, api, setLocalEnabled, liveAlt, historyAlt, perpOf, loadBinance, loadCoinbase, reconnect, bx, parseKey, label, nameOf, sourceLabel, names, meta,
     resolveSync, resolve, search, localSearch, klines, cachedKlines, recent, streamKline, streamTickers, binanceTickers, yahooQuotes,
     cgMarkets, cgTrending, KR_NAMES, us, loadUS, usSearch, board, boardAll, boardSyms, usSpark, post };
 })();
@@ -2719,9 +2825,10 @@ const CH = (() => {
     : s === 'hlc3' ? D.H.map((h, i) => (h + D.L[i] + D.C[i]) / 3) : D.C;
 
   // 시각 ↔ 봉 번호 (봉 사이·미래 구간도 이어서 계산 → 그림이 타임프레임을 바꿔도 같은 자리)
+  const barStep = () => DS.TF_SEC[S.dataTf || S.tf] || 86400;   // 지금 화면에 있는 봉의 간격
   function logicalOf(t) {
     const T = D.T, n = T.length; if (!n) return 0;
-    const step = DS.TF_SEC[S.tf] || 86400;
+    const step = barStep();
     if (t <= T[0]) return (t - T[0]) / step;
     if (t >= T[n - 1]) return n - 1 + (t - T[n - 1]) / step;
     let lo = 0, hi = n - 1;
@@ -2729,13 +2836,20 @@ const CH = (() => {
     return lo + (t - T[lo]) / (T[hi] - T[lo]);
   }
   function timeOf(lg) {
-    const T = D.T, n = T.length, step = DS.TF_SEC[S.tf] || 86400;
+    const T = D.T, n = T.length, step = barStep();
     if (!n) return 0;
     if (lg <= 0) return T[0] + lg * step;
     if (lg >= n - 1) return T[n - 1] + (lg - n + 1) * step;
     const i = Math.floor(lg); return T[i] + (lg - i) * (T[i + 1] - T[i]);
   }
-  const xOf = lg => chart.timeScale().logicalToCoordinate(lg);
+  // 봉 번호 → 화면 x. 라이브러리(5.2)는 소수 봉 번호(봉 안쪽 시각)에 0을 돌려줘서 그림이 왼쪽 끝으로 붙었음
+  // → 앞뒤 정수 봉의 x 사이를 비율로 계산 (주봉·월봉·년봉, 다른 간격에서 그린 그림이 제자리에 보이게)
+  function xOf(lg) {
+    if (!chart || lg == null || !isFinite(lg)) return null;
+    const ts = chart.timeScale(), i = Math.floor(lg), f = lg - i;
+    const a = ts.logicalToCoordinate(i); if (a == null || !f) return a;
+    const b = ts.logicalToCoordinate(i + 1); return b == null ? a : a + (b - a) * f;
+  }
   const yOf = p => candle.priceToCoordinate(p);
 
   // ============================================================
@@ -3934,17 +4048,49 @@ const CH = (() => {
     }
     candle.update(mainPoint(n));
   }
+  // 보이는 봉 맞추기: 최근 show개(없으면 전체)를 오른쪽(최근) 기준으로 보여 줌
+  // 봉이 적으면(년봉·새 종목) 봉 폭을 40px까지만 키우고 오른쪽에 붙임 · 첫 봉이 반쯤 잘리지 않게 왼쪽에 여유
+  const MAX_SP = 40;
+  function fitBars(show) {
+    if (!chart || !D.N) return;
+    const ts = chart.timeScale(), n = D.N, k = Math.max(1, Math.min(n, show || n));
+    const w = ts.width() || Math.max(200, (box && box.clientWidth || 900) - 70);
+    const off = Math.min(+cfg.rightOffset || 0, Math.max(1, Math.round(k * 0.06)));
+    const to = n - 1 + off + 0.5, span = Math.max(k + off + 1, w / MAX_SP);
+    ts.setVisibleLogicalRange({ from: to - span, to });
+  }
   // 보이는 기간: {from: 초} 부터 끝까지, 'all' = 전체
   function applyRange(r) {
     if (!chart || !D.N) return;
-    if (r === 'all') { chart.timeScale().fitContent(); return; }
+    if (r === 'all') return fitBars();
     let i = D.T.findIndex(t => t >= r.from); if (i < 0) i = 0;
-    chart.timeScale().setVisibleLogicalRange({ from: i, to: D.N - 1 + (+cfg.rightOffset || 0) });
+    fitBars(D.N - i);
   }
 
+  // 패널 높이 기억: 지표 패널 경계를 끌어 바꾼 높이를 지표별로 저장 → 간격·종목을 바꿔 다시 그려도, 새로 열어도 그대로
+  const PH_KEY = 'mc.paneH.' + (new URLSearchParams(location.search).get('pane') || '0');
+  let paneH = (() => { try { return JSON.parse(localStorage.getItem(PH_KEY) || '{}') || {}; } catch { return {}; } })();
+  // 패널 이름 = 지표 종류 + 같은 종류 중 몇 번째 (지표 id는 새로 열 때마다 바뀔 수 있어 안 씀)
+  const paneIds = () => { const ids = ['main'], seen = {}; for (const h of handles) if (h.pane && h.inst && ids[h.pane] == null) { const t = h.inst.type; ids[h.pane] = t + '#' + (seen[t] = (seen[t] || 0) + 1); } return ids; };
+  function rememberPanes() {
+    if (!chart) return;
+    const ps = chart.panes(); if (ps.length < 2) return;
+    const ids = paneIds(), o = {};
+    ps.forEach((p, i) => { const h = p.getHeight(); if (ids[i] && h > 10) o[ids[i]] = h; });
+    if (!o.main || Object.keys(o).length < 2) return;
+    paneH = { ...paneH, ...o };
+    try { localStorage.setItem(PH_KEY, JSON.stringify(paneH)); } catch {}
+  }
+  function applyPanes() {
+    const ps = chart.panes(), ids = paneIds();
+    if (!paneH.main || !ids.some((id, i) => i && paneH[id])) { ps.forEach((p, i) => p.setStretchFactor(i === 0 ? 4 : 1)); return; }
+    // 기억 없는 새 패널은 기본 비율 (메인의 1/4)
+    ps.forEach((p, i) => p.setStretchFactor(Math.max(30, paneH[ids[i]] || (i === 0 ? 400 : paneH.main / 4))));
+  }
   function render(keepRange = true) {
     if (!box || !LW()) return;
     const range = keepRange && chart ? chart.timeScale().getVisibleLogicalRange() : null;
+    rememberPanes();
     for (const h of handles) h.remove && h.remove();
     if (chart) { chart.remove(); chart = null; }
     handles = [];
@@ -3965,13 +4111,12 @@ const CH = (() => {
       } catch (e) { console.error('indicator', inst.type, e); handles.push({ inst, error: e.message }); }
     }
     attachDrawPrims();
-    const panes = chart.panes();
-    panes.forEach((p, i) => p.setStretchFactor(i === 0 ? 4 : 1));
+    applyPanes();
     applyLogMode();
     if (range) chart.timeScale().setVisibleLogicalRange(range);
     else if (pendingRange) applyRange(pendingRange);
-    else if (['1w', '1M', '1y'].includes(S.tf)) chart.timeScale().fitContent();   // 주봉 이상은 처음부터 전체
-    else chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, D.N - 180), to: D.N + 8 });
+    else if ((DS.TF_SEC[S.tf] || 0) >= 604800) fitBars();   // 주봉 이상은 처음부터 전체
+    else fitBars(180);
     pendingRange = null;
     chart.subscribeCrosshairMove(p => updateLegendValues(p.logical != null && p.time !== undefined ? Math.round(p.logical) : null));
     chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if (r && r.from < 40) loadOlder(); });
@@ -4078,7 +4223,7 @@ const CH = (() => {
   }
 
   // ---------------- 데이터 불러오기 ----------------
-  function setBars(b) { S.bars = b; syncArrays(); }
+  function setBars(b) { S.bars = b; S.dataTf = S.tf; syncArrays(); }
   async function load(key, tf, opt = {}) {
     const gen = ++S.gen;
     pendingRange = opt.range || null;
@@ -4088,7 +4233,7 @@ const CH = (() => {
     onChange('loading', key);
     const maxLen = Math.max(0, ...layout.filter(x => x.visible && (x.type === 'ma' || x.type === 'ema')).map(x => +x.p.len || 0));
     // 일봉 이상은 상장 이후 전체 + 선물 이전 구간(현물·Bitstamp·야후)까지
-    const longTf = ['1d', '3d', '1w', '1M', '1y'].includes(tf);
+    const longTf = (DS.TF_SEC[tf] || 0) >= 86400;
     const need = longTf ? 20000 : Math.min(5000, Math.max(1500, maxLen + 400));
     let bars;
     try { bars = await DS.klines(key, tf, { need, long: true }); }
@@ -4140,7 +4285,7 @@ const CH = (() => {
   }
   async function loadOlder() {
     const { src, id } = DS.parseKey(S.key || 'X:Y');
-    if (S.loadingOlder || S.noOlder || src === 'yahoo' || ['1M', '1y'].includes(S.tf) || !D.N) return;
+    if (S.loadingOlder || S.noOlder || src === 'yahoo' || ['1M', '1y'].includes(S.tf) || /^\d+M$/.test(S.tf) || !D.N) return;
     S.loadingOlder = true; const gen = S.gen;
     try {
       const older = await DS.klines(S.key, S.tf, { need: 1000, endTime: S.bars[0][0] - 1, long: true });
@@ -4158,6 +4303,8 @@ const CH = (() => {
 
   // ---------------- 바깥에서 쓰는 함수 ----------------
   function init(el, lg, opts) {
+    // 패널 경계를 끌고 놓으면 높이 기억 (라이브러리가 이벤트를 안 줘서 놓을 때 읽음)
+    document.addEventListener('pointerup', e => { if (box && box.contains(e.target)) setTimeout(rememberPanes, 30); }, true);
     box = el; legend = lg; onChange = opts.onChange || onChange; layoutSaver = opts.saveLayout || layoutSaver; scanInfo = opts.scanInfo || scanInfo;
     layout = normLayout(opts.layout) || DEFAULT_LAYOUT();
     if (opts.fibTemplate) fibTemplate = opts.fibTemplate;
@@ -4212,11 +4359,12 @@ const CH = (() => {
   function redraw() { drawPrim.update(); }
   function saveFibTemplate(f) { fibTemplate = JSON.parse(JSON.stringify(f)); return fibTemplate; }
   function goLatest() { chart && chart.timeScale().scrollToRealTime(); }
-  function fit() { chart && chart.timeScale().fitContent(); }
+  function fit() { fitBars(); }
 
   return { setTopExtra: f => { topExtra = f; }, init, load, render, undo, redo, setLayout, debugOverlay: id => overlay && overlay.layers.get(id), FULL_LAYOUT, DEFAULT_LAYOUT, addDrawing, duplicate, finishCreate, POLY, TOOL_N, toggleIndicator, removeIndicator, autoScale, selectDrawing, FIBEXT_LEVELS, FIBCH_LEVELS, setLog, setScale, setConfig, setRange, setLocked, setHidden, CFG_DEFAULT, get cfg() { return cfg; }, setMagnet, setTool, deleteSelected, clearDrawings, cancelCreate, addIndicator, updateIndicator, resetLayout,
     rethemed, screenshot, redraw, addImage, saveDrawings, saveFibTemplate, goLatest, fit, TYPES, FIB_DEFAULT,
     get state() { return S; }, get layout() { return layout; }, get drawings() { return draw; }, get chart() { return chart; }, get data() { return D; },
+    debugDraw: () => draw.list.map(d => ({ id: d.id, type: d.type, pane: d.pane || 'main', P: proj(d, serOf(d.pane || 'main')), L: d.p.map(q => logicalOf(q.t)) })),
     get fibTemplate() { return fibTemplate; }, refreshScanZones() { for (const h of handles) if (h.inst?.type === 'zones' && h.fill) h.fill(); refreshLegend(); } };
 })();
 
@@ -5633,9 +5781,10 @@ const UI = (() => {
 
   // ---------------- 트레이딩뷰 원본 (무료 위젯) ----------------
   const TV_IV = { '1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30', '1h': '60', '2h': '120', '3h': '180', '4h': '240', '6h': '360', '12h': '720', '1d': 'D', '3d': '3D', '1w': 'W', '1M': 'M' };
+  const tvIv = tf => TV_IV[tf] || (p => !p ? 'D' : p.u === 'm' ? String(p.n) : p.u === 'h' ? String(p.n * 60) : p.n + { d: 'D', w: 'W', M: 'M' }[p.u])(DS.tfParse(tf));
   let tvShown = '';
   function renderTv(force) {
-    const box = $('tvBox'), sym = tvSymbol(ST.key), iv = TV_IV[ST.tf] || 'D', dark = document.documentElement.getAttribute('data-theme') !== 'light' && (ST.theme !== 'system' || matchMedia('(prefers-color-scheme: dark)').matches);
+    const box = $('tvBox'), sym = tvSymbol(ST.key), iv = tvIv(ST.tf), dark = document.documentElement.getAttribute('data-theme') !== 'light' && (ST.theme !== 'system' || matchMedia('(prefers-color-scheme: dark)').matches);
     const sig = [sym, iv, dark].join('|'); if (!force && sig === tvShown) return; tvShown = sig;
     $('tvSym').textContent = sym; $('tvOpen').href = 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(sym) + '&interval=' + iv;
     box.innerHTML = '<div class="tradingview-widget-container" style="height:100%;width:100%"><div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div></div>';
@@ -5691,7 +5840,99 @@ const UI = (() => {
     };
     tick(); setInterval(tick, 1000);
   }
-  function setTf(tf) { ST.tf = tf; save(); document.querySelectorAll('#tfBar .tb').forEach(x => x.classList.toggle('on', x.dataset.tf === tf)); if (ST.view === 'tv') renderTv(); }
+  // ---------------- 봉 간격: ★ 즐겨찾기 막대 + 전체 메뉴 + 사용자 간격 (웨돔·트레이딩뷰식) ----------------
+  // 저장: localStorage 'mc.tfs' (관심목록·차트 상태와 따로 · 분할 차트끼리 같이 씀)
+  const TF_GROUPS = [['분', ['1m', '3m', '5m', '10m', '15m', '30m']], ['시간', ['1h', '2h', '3h', '4h', '6h', '8h', '12h']], ['일 · 주 · 달', ['1d', '3d', '1w', '3w', '1M', '1y']]];
+  const TF_BUILTIN = new Set(TF_GROUPS.flatMap(g => g[1]));
+  const TF_FAV0 = ['1m', '5m', '15m', '1h', '4h', '1d', '1w', '1M', '1y'];   // 웨돔 기본 7개 + 월봉·년봉
+  function loadTfp() {
+    const o = read('mc.tfs') || {};
+    const t = { fav: Array.isArray(o.fav) ? o.fav : TF_FAV0.slice(), custom: Array.isArray(o.custom) ? o.custom : [], closed: Array.isArray(o.closed) ? o.closed : [] };
+    t.custom = t.custom.filter(tf => DS.tfAdd(tf) && !TF_BUILTIN.has(tf));
+    t.fav = t.fav.filter(tf => DS.tfAdd(tf));
+    return t;
+  }
+  let tfp = loadTfp();
+  for (const v of [ST.tf, ...Object.values(ST.layoutTf || {})]) if (v) DS.tfAdd(v);
+  if (!DS.TF_SEC[ST.tf]) ST.tf = '1d';
+  const saveTfp = () => { try { localStorage.setItem('mc.tfs', JSON.stringify(tfp)); } catch {} };
+  const bySec = (a, b) => DS.TF_SEC[a] - DS.TF_SEC[b];
+  const tfGroupOf = tf => { const u = tf === '1y' ? 'M' : DS.tfParse(tf)?.u; return u === 'm' ? 0 : u === 'h' ? 1 : 2; };
+  function paintTfBar() {
+    const bar = $('tfBar'); if (!bar) return;
+    const list = [...new Set([...tfp.fav, ST.tf])].filter(tf => tf && DS.TF_SEC[tf]).sort(bySec);
+    bar.innerHTML = list.map(v => `<button class="tb${v === ST.tf ? ' on' : ''}${tfp.fav.includes(v) ? '' : ' tmp'}" data-tf="${v}" title="${esc(DS.tfLong(v))}${tfp.fav.includes(v) ? '' : ' (즐겨찾기 아님)'}">${esc(DS.TF_NAME[v] || v)}</button>`).join('')
+      + '<button class="tb tf-more" data-more title="봉 간격 모두 보기 · ★ 즐겨찾기 · 사용자 간격 추가"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>';
+  }
+  function pickTf(tf) { if (!DS.TF_SEC[tf] && !DS.tfAdd(tf)) return; setTf(tf); CH.load(ST.key, ST.tf); }
+  function toggleFavTf(tf) {
+    const i = tfp.fav.indexOf(tf);
+    if (i >= 0) tfp.fav.splice(i, 1); else tfp.fav.push(tf);
+    saveTfp(); paintTfBar();
+  }
+  function tfMenu(anchor) {
+    document.querySelectorAll('.menu').forEach(m => m.remove());
+    const m = document.createElement('div'); m.className = 'menu tfm';
+    const item = (tf, custom) => { const fav = tfp.fav.includes(tf);
+      return `<div class="tfm-i${tf === ST.tf ? ' on' : ''}" data-tf="${tf}"><span>${esc(DS.tfLong(tf))}</span>${custom ? `<button class="tfm-x" data-del="${tf}" title="사용자 간격 지우기">✕</button>` : ''}<button class="tfm-s${fav ? ' on' : ''}" data-fav="${tf}" title="${fav ? '막대에서 빼기' : '막대에 고정'}">${fav ? '★' : '☆'}</button></div>`; };
+    const paint = () => {
+      m.innerHTML = '<button class="tfm-add" data-add>＋ 사용자 간격 추가…</button>' + TF_GROUPS.map(([name, list], gi) => {
+        const cu = tfp.custom.filter(tf => tfGroupOf(tf) === gi), closed = tfp.closed.includes(gi);
+        return `<div class="tfm-h" data-g="${gi}"><span>${name}</span><svg width="10" height="10" viewBox="0 0 10 10"><path d="${closed ? 'M2 3.5l3 3 3-3' : 'M2 6.5l3-3 3 3'}" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></div>`
+          + (closed ? '' : [...list, ...cu].sort(bySec).map(tf => item(tf, cu.includes(tf))).join(''));
+      }).join('');
+    };
+    paint();
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect(), top = Math.round(r.bottom + 4);
+    m.style.top = top + 'px'; m.style.maxHeight = (innerHeight - top - 8) + 'px';
+    m.style.left = Math.max(8, Math.min(Math.round(r.left), innerWidth - m.offsetWidth - 8)) + 'px';
+    const close = () => { m.remove(); document.removeEventListener('pointerdown', off, true); document.removeEventListener('keydown', esc1, true); };
+    const off = e => { if (!m.contains(e.target) && !anchor.contains(e.target)) close(); };
+    const esc1 = e => { if (e.key === 'Escape') close(); };
+    setTimeout(() => { document.addEventListener('pointerdown', off, true); document.addEventListener('keydown', esc1, true); }, 0);
+    m.onclick = e => {
+      const t = e.target.closest('[data-add],[data-fav],[data-del],[data-g],[data-tf]'); if (!t) return;
+      if (t.dataset.add != null) { close(); return tfAddDialog(); }
+      if (t.dataset.fav) { toggleFavTf(t.dataset.fav); return paint(); }
+      if (t.dataset.del) {
+        const tf = t.dataset.del; tfp.custom = tfp.custom.filter(x => x !== tf); tfp.fav = tfp.fav.filter(x => x !== tf);
+        saveTfp(); paintTfBar(); return paint();
+      }
+      if (t.dataset.g != null) { const g = +t.dataset.g; tfp.closed = tfp.closed.includes(g) ? tfp.closed.filter(x => x !== g) : [...tfp.closed, g]; saveTfp(); return paint(); }
+      close(); pickTf(t.dataset.tf);
+    };
+    m.oncontextmenu = e => e.preventDefault();
+    return m;
+  }
+  function tfAddDialog() {
+    const UN = { m: '분', h: '시간', d: '일', w: '주', M: '달' };
+    const d = openDlg(`<div class="in" style="max-width:380px"><header>사용자 간격 추가<button class="ib" data-x>✕</button></header><div class="body">
+      <div style="display:flex;gap:8px;align-items:center"><input id="tfN" type="number" min="1" step="1" value="10" style="width:100px"><select id="tfU">${Object.entries(UN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div id="tfMsg" class="dim" style="font-size:12px;min-height:18px"></div>
+      <div class="dim" style="font-size:11.5px;line-height:1.6">거래소에 없는 간격은 가까운 기본 봉을 묶어 만듭니다. 코인은 UTC 0시, 주식은 그날 첫 봉부터 셉니다. 기본 봉을 많이 받는 간격(예: 7분)은 처음 열 때 조금 오래 걸립니다.</div></div>
+      <footer><button class="btn" data-x>닫기</button><button class="btn primary" id="tfOk">추가하고 열기</button></footer></div>`);
+    const n = d.querySelector('#tfN'), u = d.querySelector('#tfU'), msg = d.querySelector('#tfMsg');
+    const check = () => {
+      const tf = DS.tfNorm(n.value, u.value);
+      if (!tf) { msg.innerHTML = `<span class="neg">1~${DS.UNIT_MAX[u.value]}${UN[u.value]} 사이로 넣으세요.</span>`; return null; }
+      const dv = DS.derivedOf(tf);
+      msg.textContent = !dv || TF_BUILTIN.has(tf) || tfp.custom.includes(tf) ? `${DS.tfLong(tf)} — 이미 있는 간격입니다 (막대에 고정하고 엽니다)` : `${DS.tfLong(tf)} = ${DS.tfLong(dv.base)} × ${dv.n}`;
+      return tf;
+    };
+    n.oninput = check; u.onchange = check; check(); n.select();
+    const ok = () => {
+      const tf = check(); if (!tf || !DS.tfAdd(tf)) return;
+      if (DS.derivedOf(tf) && !TF_BUILTIN.has(tf) && !tfp.custom.includes(tf)) tfp.custom.push(tf);
+      if (!tfp.fav.includes(tf)) tfp.fav.push(tf);
+      saveTfp(); d.close(); pickTf(tf); toast(`${DS.tfLong(tf)} 봉을 막대에 고정했습니다`);
+    };
+    d.querySelector('#tfOk').onclick = ok;
+    n.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ok(); } };
+  }
+  // 다른 분할 차트·창에서 바꾸면 따라감
+  window.addEventListener('storage', e => { if (e.key === 'mc.tfs') { tfp = loadTfp(); paintTfBar(); } });
+  function setTf(tf) { ST.tf = tf; save(); paintTfBar(); if (ST.view === 'tv') renderTv(); }
   function setScale(m) {
     ST.chartCfg = { ...(ST.chartCfg || {}), scale: m }; ST.log = m === 'log'; save();
     CH.setScale(m); paintScale();
@@ -5778,8 +6019,15 @@ const UI = (() => {
 
   // ---------------- 시작 ----------------
   function bindTop() {
-    $('tfBar').innerHTML = DS.TFS.map(([v, n]) => `<button class="tb${v === ST.tf ? ' on' : ''}" data-tf="${v}">${n}</button>`).join('');
-    $('tfBar').onclick = e => { const b = e.target.closest('[data-tf]'); if (!b) return; setTf(b.dataset.tf); CH.load(ST.key, ST.tf); };
+    paintTfBar();
+    $('tfBar').onclick = e => {
+      const more = e.target.closest('[data-more]');
+      if (more) { if (document.querySelector('.menu.tfm')) document.querySelector('.menu.tfm').remove(); else tfMenu(more); return; }
+      const b = e.target.closest('[data-tf]'); if (!b) return; pickTf(b.dataset.tf);
+    };
+    // 막대의 간격을 오른쪽 클릭: 즐겨찾기 빼기
+    $('tfBar').oncontextmenu = e => { const b = e.target.closest('[data-tf]'); if (!b) return; e.preventDefault(); const tf = b.dataset.tf, fav = tfp.fav.includes(tf);
+      showMenuAt(e.clientX, e.clientY, [[fav ? '막대에서 빼기 (☆)' : '막대에 고정 (★)', () => toggleFavTf(tf)], ['봉 간격 모두 보기…', () => tfMenu($('tfBar').querySelector('[data-more]'))], ['사용자 간격 추가…', tfAddDialog]], DS.tfLong(tf)); };
     $('symBtn').onclick = () => openSearch();
     $('srv').onclick = () => DS.HOSTED ? serverDialog() : DS.ping().then(() => { paintSrv(); toast(DS.srv.ok ? 'PC 서버 연결됨' : 'PC 서버가 꺼져 있습니다'); });
     $('starBtn').onclick = () => toggleInList(ST.key);
@@ -5937,6 +6185,18 @@ const UI = (() => {
     DS.streamTickers(u => { Object.assign(px, u); paintPrices(); });
     if (DS.srv.ok == null) await DS.ping();
     paintSrv();
+    // 링크로 열기: ?symbol=BTCUSDT.P&tf=1M (트레이딩뷰식 이름 · TOP2 홈페이지 차트 메뉴). 지금 차트만 바뀌고 관심목록은 그대로
+    try {
+      const lp = new URLSearchParams(location.search), lsym = lp.get('symbol'), lkey = lp.get('key'), ltf = lp.get('tf');
+      if (lsym || lkey || ltf) {
+        if (ltf && (DS.TF_SEC[ltf] || DS.tfAdd(ltf))) setTf(ltf);
+        if (lsym || lkey) {
+          const k = lkey && /^(BINANCE|BINANCESPOT|YAHOO|CRYPTO|COINBASE):[A-Z0-9.\-^=]{1,24}$/.test(lkey) ? lkey : await DS.resolve(lsym || '').catch(() => null);
+          if (k) { ST.key = k; ST.view = 'chart'; save(); } else toast('링크의 종목을 찾지 못했습니다: ' + (lsym || lkey), 5000);
+        }
+        history.replaceState(null, '', location.pathname + location.hash);   // 새로고침하면 마지막으로 본 차트 그대로
+      }
+    } catch (e) { console.warn('link', e.message); }
     openChart(ST.key);
     if (ST.view !== 'chart') setView(ST.view);
     bindSplit();
